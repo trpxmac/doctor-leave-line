@@ -6,3 +6,4 @@ uploads/*
 server/data/store.json
 .DS_Store
 *.log
+node_modules
