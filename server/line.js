@@ -13,11 +13,16 @@ export const isLineConfigured = Boolean(LINE_CHANNEL_ACCESS_TOKEN && LINE_CHANNE
  * Send push message to LINE User (or record in simulator if token is not set)
  */
 export async function sendLinePushMessage(toLineUserId, messages) {
+  // === OVERRIDE FOR DEMO / TESTING ===
+  const overrideId = process.env.TEST_LINE_USER_ID;
+  const targetId = (overrideId && overrideId.length > 10) ? overrideId : toLineUserId;
+
   const payload = {
-    to: toLineUserId,
+    to: targetId,
     messages: Array.isArray(messages) ? messages : [messages],
     sentAt: new Date().toISOString(),
-    id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7)
+    id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
+    originalTo: toLineUserId // Keep track of who it was supposed to go to
   };
 
   // Record into simulator log
@@ -27,7 +32,7 @@ export async function sendLinePushMessage(toLineUserId, messages) {
   }
 
   if (!isLineConfigured) {
-    console.log(`[LINE SIMULATOR] 📱 Sent 1-on-1 Message to ${toLineUserId}:`, JSON.stringify(messages, null, 2));
+    console.log(`[LINE SIMULATOR] 📱 Sent 1-on-1 Message to ${targetId}:`, JSON.stringify(messages, null, 2));
     return { success: true, simulated: true, payload };
   }
 
@@ -39,7 +44,7 @@ export async function sendLinePushMessage(toLineUserId, messages) {
         Authorization: `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`,
       },
       body: JSON.stringify({
-        to: toLineUserId,
+        to: targetId,
         messages: Array.isArray(messages) ? messages : [messages],
       }),
     });
