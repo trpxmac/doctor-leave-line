@@ -16,6 +16,7 @@ import {
   buildApproverRequestFlex,
   buildLeaveDecisionFlex,
   buildEmergencyAlertFlex,
+  buildCancelAlertFlex,
   simulatedLineMessages,
   isLineConfigured
 } from '../line.js';
@@ -517,6 +518,28 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     const leaveType = db.leave_types.find(lt => lt.id === leave_type_id);
     if (!leaveType) return res.status(404).json({ error: 'Leave type not found' });
 
+    // Validate Overlap / Duplicate Check
+    const overlaps = db.leave_requests.filter(r => 
+      r.doctor_id === doctor_id && 
+      (r.status === 'PENDING' || r.status === 'APPROVED') &&
+      start_date <= r.end_date && end_date >= r.start_date
+    );
+
+    if (overlaps.length > 0) {
+      // Check half-day edge case (Morning + Afternoon on the same day)
+      const isSameDay = start_date === end_date;
+      const hasConflict = overlaps.some(r => {
+        if (!isSameDay || r.start_date !== r.end_date) return true; // multi-day overlap is always conflict
+        if (r.half_day_type === 'FULL_DAY' || half_day_type === 'FULL_DAY') return true;
+        if (r.half_day_type === half_day_type) return true; // Both morning or both afternoon
+        return false; // One is morning, one is afternoon -> allow
+      });
+
+      if (hasConflict) {
+        return res.status(400).json({ error: 'คุณมีรายการลาที่ซ้อนทับกับช่วงเวลานี้อยู่ในระบบแล้ว (รออนุมัติ หรือ อนุมัติแล้ว)' });
+      }
+    }
+
     // Validate Full-time only check
     if (doc.doctor_type === 'PART_TIME' && leaveType.is_full_time_only) {
       return res.status(400).json({
@@ -699,6 +722,76 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
   } catch (err) {
     console.error('Leave submission error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// CANCEL LEAVE REQUEST
+// -------------------------------------------------------------
+router.post('/leave-requests/:id/cancel', async (req, res) => {
+  try {
+    const db = getDb();
+    const request = db.leave_requests.find(r => r.id === req.params.id);
+    if (!request) return res.status(404).json({ error: 'Request not found' });
+
+    const { doctor_id, reason } = req.body;
+    
+    // Basic check - only the doctor who created it can cancel it
+    if (request.doctor_id !== doctor_id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    // Only allow canceling if PENDING
+    if (request.status !== 'PENDING') {
+      return res.status(400).json({ error: 'สามารถยกเลิกได้เฉพาะคำขอที่กำลังรออนุมัติเท่านั้น' });
+    }
+
+    // Restore balance if it's deducted from quota
+    const leaveType = db.leave_types.find(lt => lt.id === request.leave_type_id);
+    if (leaveType && leaveType.deducts_from_quota) {
+      const currentYear = new Date().getFullYear();
+      const balance = db.leave_balances.find(b => 
+        b.doctor_id === request.doctor_id && 
+        b.leave_type_id === leaveType.id && 
+        b.fiscal_year === currentYear
+      );
+      if (balance) {
+        balance.pending_days -= request.duration_days;
+        if (balance.pending_days < 0) balance.pending_days = 0;
+      }
+    }
+
+    request.status = 'CANCELLED';
+    
+    const log = {
+      id: uuidv4(),
+      request_id: request.id,
+      step_order: request.current_step,
+      action: 'CANCEL',
+      approver_id: doctor_id,
+      comments: reason || 'แพทย์ยกเลิกคำขอด้วยตนเอง',
+      acted_at: new Date().toISOString()
+    };
+    db.approval_logs.push(log);
+
+    saveStore();
+
+    // Send Cancel Notification to Approver
+    const doc = db.doctors.find(d => d.id === doctor_id);
+    const route = db.approval_routes.find(r => r.doctor_id === doctor_id && r.step_order === 1);
+    const defaultApproverId = 'c0000000-0000-0000-0000-000000000002'; // Dr. Paravee default
+    const approverId = route ? route.approver_id : defaultApproverId; 
+    const approver = db.doctors.find(d => d.id === approverId);
+
+    if (approver && approver.line_user_id) {
+      const flex = buildCancelAlertFlex(request, doc, leaveType);
+      await sendLinePushMessage(approver.line_user_id, flex);
+    }
+
+    res.json({ success: true, message: 'ยกเลิกคำขอลาเรียบร้อยแล้ว', request });
+  } catch (err) {
+    console.error('Cancel Error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 

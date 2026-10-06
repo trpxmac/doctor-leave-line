@@ -535,3 +535,134 @@ export function buildEmergencyAlertFlex(request, doctor, leaveType, koongPhone) 
     }
   };
 }
+
+// ------------------------------------------------------------------
+// 6. CANCEL ALERT FLEX MESSAGE
+// ------------------------------------------------------------------
+export function buildCancelAlertFlex(request, doc, leaveType) {
+  const flex = {
+    type: "bubble",
+    size: "mega",
+    header: {
+      type: "box",
+      layout: "vertical",
+      contents: [
+        {
+          type: "text",
+          text: "แจ้งเตือนยกเลิกการลา",
+          weight: "bold",
+          size: "lg",
+          color: "#ffffff"
+        },
+        {
+          type: "text",
+          text: `โดย ${doc.prefix_th}${doc.first_name_th} ${doc.last_name_th}`,
+          size: "xs",
+          color: "#ffffffcc"
+        }
+      ],
+      backgroundColor: "#ef4444", // Rose 500
+      paddingAll: "20px"
+    },
+    body: {
+      type: "box",
+      layout: "vertical",
+      contents: [
+        {
+          type: "text",
+          text: "แพทย์ได้ทำการยกเลิกคำขอลาด้วยตนเอง",
+          size: "sm",
+          color: "#475569",
+          wrap: true,
+          weight: "bold",
+          margin: "sm"
+        },
+        {
+          type: "box",
+          layout: "vertical",
+          margin: "lg",
+          spacing: "sm",
+          contents: [
+            {
+              type: "box",
+              layout: "baseline",
+              spacing: "sm",
+              contents: [
+                {
+                  type: "text",
+                  text: "เลขที่",
+                  color: "#aaaaaa",
+                  size: "sm",
+                  flex: 2
+                },
+                {
+                  type: "text",
+                  text: request.request_no,
+                  wrap: true,
+                  color: "#333333",
+                  size: "sm",
+                  flex: 5,
+                  weight: "bold"
+                }
+              ]
+            },
+            {
+              type: "box",
+              layout: "baseline",
+              spacing: "sm",
+              contents: [
+                {
+                  type: "text",
+                  text: "ประเภท",
+                  color: "#aaaaaa",
+                  size: "sm",
+                  flex: 2
+                },
+                {
+                  type: "text",
+                  text: leaveType.name_th,
+                  wrap: true,
+                  color: "#333333",
+                  size: "sm",
+                  flex: 5
+                }
+              ]
+            },
+            {
+              type: "box",
+              layout: "baseline",
+              spacing: "sm",
+              contents: [
+                {
+                  type: "text",
+                  text: "วันที่",
+                  color: "#aaaaaa",
+                  size: "sm",
+                  flex: 2
+                },
+                {
+                  type: "text",
+                  text: request.start_date === request.end_date 
+                          ? request.start_date 
+                          : `${request.start_date} - ${request.end_date}`,
+                  wrap: true,
+                  color: "#333333",
+                  size: "sm",
+                  flex: 5
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  };
+
+  return [
+    {
+      type: "flex",
+      altText: `ยกเลิกการลา: ${doc.first_name_th}`,
+      contents: flex
+    }
+  ];
+}
