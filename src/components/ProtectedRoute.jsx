@@ -13,7 +13,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
 
   if (!hasRole) {
     // If not allowed, redirect to a default safe page based on their role
-    if (currentDoctor.roles.includes('ADMIN')) {
+    if (currentDoctor.roles.includes('ADMIN') || currentDoctor.roles.includes('MEDICAL_ADMIN')) {
       return <Navigate to="/admin" replace />;
     }
     return <Navigate to="/" replace />;

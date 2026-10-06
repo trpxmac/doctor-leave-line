@@ -33,7 +33,7 @@ function AppContent() {
           <main className="flex-1 pb-12">
             <Routes>
               <Route path="/" element={
-                <ProtectedRoute allowedRoles={['DOCTOR', 'ADMIN']}>
+                <ProtectedRoute allowedRoles={['DOCTOR', 'MEDICAL_ADMIN']}>
                   <DoctorLiffPage />
                 </ProtectedRoute>
               } />
@@ -43,22 +43,22 @@ function AppContent() {
                 </ProtectedRoute>
               } />
               <Route path="/approver" element={
-                <ProtectedRoute allowedRoles={['APPROVER']}>
+                <ProtectedRoute allowedRoles={['DEPT_HEAD', 'APPROVER']}>
                   <ApproverPage />
                 </ProtectedRoute>
               } />
               <Route path="/admin" element={
-                <ProtectedRoute allowedRoles={['ADMIN']}>
+                <ProtectedRoute allowedRoles={['MEDICAL_ADMIN', 'ADMIN']}>
                   <AdminDashboardPage />
                 </ProtectedRoute>
               } />
               <Route path="/admin/criteria" element={
-                <ProtectedRoute allowedRoles={['ADMIN']}>
+                <ProtectedRoute allowedRoles={['MEDICAL_ADMIN', 'ADMIN']}>
                   <AdminCriteriaPage />
                 </ProtectedRoute>
               } />
               <Route path="/admin/audit" element={
-                <ProtectedRoute allowedRoles={['ADMIN']}>
+                <ProtectedRoute allowedRoles={['MEDICAL_ADMIN', 'ADMIN']}>
                   <AdminAuditPage />
                 </ProtectedRoute>
               } />
