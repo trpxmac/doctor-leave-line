@@ -573,11 +573,11 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     }
 
     // Balance check
-    const reqYear = new Date(start_date).getFullYear();
-    const balance = db.leave_balances.find(b => b.doctor_id === doctor_id && b.leave_type_id === leave_type_id && b.fiscal_year === reqYear);
-    if (balance) {
-      const total = Number(balance.entitlement_days) + Number(balance.carried_over_days);
-      const remaining = total - Number(balance.used_days) - Number(balance.pending_days);
+    let reqYear = new Date(start_date).getFullYear();
+    let balanceRecord = db.leave_balances.find(b => b.doctor_id === doctor_id && b.leave_type_id === leave_type_id && b.fiscal_year === reqYear);
+    if (balanceRecord) {
+      const total = Number(balanceRecord.entitlement_days) + Number(balanceRecord.carried_over_days);
+      const remaining = total - Number(balanceRecord.used_days) - Number(balanceRecord.pending_days);
       if (remaining < durationDays) {
         return res.status(400).json({ error: `วันลาคงเหลือไม่พอ (คงเหลือ ${remaining} วัน แต่ต้องการลา ${durationDays} วัน)` });
       }
@@ -644,14 +644,12 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     }
 
     // Sync Balance: increment pending_days
-    const reqYear = new Date(start_date).getFullYear();
-    let balance = db.leave_balances.find(b => b.doctor_id === doctor_id && b.leave_type_id === leave_type_id && b.fiscal_year === reqYear);
-    if (balance) {
-      balance.pending_days = Number(balance.pending_days) + durationDays;
-      balance.updated_at = new Date().toISOString();
+    if (balanceRecord) {
+      balanceRecord.pending_days = Number(balanceRecord.pending_days) + durationDays;
+      balanceRecord.updated_at = new Date().toISOString();
     } else {
       // Create empty balance record if not existing
-      balance = {
+      balanceRecord = {
         id: uuidv4(),
         doctor_id,
         leave_type_id,
@@ -662,7 +660,7 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
         pending_days: durationDays,
         updated_at: new Date().toISOString()
       };
-      db.leave_balances.push(balance);
+      db.leave_balances.push(balanceRecord);
     }
 
     db.leave_requests.push(newRequest);
