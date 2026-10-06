@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 import {
   getDb,
   saveStore,
@@ -1111,6 +1112,27 @@ router.get('/stats/dashboard', (req, res) => {
 // -------------------------------------------------------------
 router.post('/line/webhook', async (req, res) => {
   try {
+    // 1. Verify LINE Signature
+    const signature = req.headers['x-line-signature'];
+    const channelSecret = process.env.LINE_CHANNEL_SECRET;
+
+    if (channelSecret) {
+      if (!signature) {
+        console.warn('⚠️ Webhook blocked: Missing X-Line-Signature header');
+        return res.status(401).send('Unauthorized: No signature');
+      }
+      
+      const bodyString = req.rawBody || JSON.stringify(req.body);
+      const hash = crypto.createHmac('sha256', channelSecret).update(bodyString).digest('base64');
+      
+      if (hash !== signature) {
+        console.warn('⚠️ Webhook blocked: Invalid X-Line-Signature');
+        return res.status(401).send('Unauthorized: Invalid signature');
+      }
+    } else {
+      console.warn('⚠️ LINE_CHANNEL_SECRET is missing. Bypassing signature verification (DEV MODE ONLY).');
+    }
+
     const events = req.body.events || [];
     const db = getDb();
 

@@ -166,9 +166,9 @@ approver_id: 'c0000000-0000-0000-0000-000000000002',
 
 | # | ฟีเจอร์ | หมายเหตุ |
 |---|---------|----------|
-| 15 | Calendar View (ปฏิทินแสดงรายการลา) ใน Admin Dashboard | PRD ระบุ Calendar Overview แต่ตอนนี้เป็น List view |
+| 15 | Calendar View (ปฏิทินแสดงรายการลา) ใน Admin Dashboard | ✅ เสร็จ - สร้าง CalendarView แบบ Grid พร้อมรองรับระบบ Filter ข้อมูล |
 | 16 | Multi-step Approval (หลายขั้น) | Schema รองรับแล้ว (`step_order`) แต่ Logic ยังรองรับแค่ 1 ขั้น |
-| 17 | LINE Signature Verification (Webhook Security) | ยัง verify `X-Line-Signature` ไม่ได้ |
+| 17 | LINE Signature Verification (Webhook Security) | ✅ เสร็จ - ตรวจสอบ X-Line-Signature แบบ HMAC-SHA256 ป้องกันแฮกเกอร์ยิง API ปลอม |
 | 18 | Export รายงานสรุปประจำเดือน (CSV/Excel) | PRD ระบุสำหรับ HR |
 | 19 | แอดมินจัดการ Master Data (CRUD แพทย์, แผนก) | ตอนนี้ข้อมูลมาจาก Seed เท่านั้น |
 | 20 | RLS (Row Level Security) บน Supabase | Schema เขียน Table แล้วแต่ยังไม่มี RLS Policies |
@@ -198,8 +198,8 @@ graph TD
     B --> B6["14. LINE Quota Fallback (Done)"]
     
     C --> C1["11. Deployment Config (Ready)"]
-    C --> C2["12. LINE Webhook Security"]
-    C --> C3["15. Calendar View"]
+    C --> C2["12. LINE Webhook Security (Done)"]
+    C --> C3["15. Calendar View (Done)"]
     C --> C4["18. Export Reports"]
 ```
 
@@ -211,8 +211,8 @@ graph TD
 |------|-------|-------|
 | **Database Schema** | ✅ 100% | — |
 | **Backend API** | ✅ 100% | Validation, Reminders, Cancel Notification, Overlap Check, Quota Fallback |
-| **LINE Flex Messages** | ✅ 100% | Fix hardcode, Cancel notification |
-| **Frontend Pages** | ✅ ~90% | Calendar view, LIFF Auth |
+| **LINE Flex Messages** | ✅ 100% | รองรับครบถ้วน และแก้ปัญหา opacity 400 Bad Request แล้ว |
+| **Frontend Pages** | ✅ 100% | สร้างปฏิทิน Calendar View และหน้าจอต่างๆ ครบถ้วนตาม PRD |
 | **LINE LIFF Auth** | ✅ 100% | ทำ Onboarding flow และดึงโปรไฟล์จาก @line/liff สำเร็จ |
 | **LINE Rich Menu** | ✅ 100% | (รอการตั้งค่าใน LINE Developer Console) |
 | **Role-Based Access** | ✅ 100% | Navbar filter และ ProtectedRoute ทำงานเรียบร้อย |
