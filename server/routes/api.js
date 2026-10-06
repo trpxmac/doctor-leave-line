@@ -584,7 +584,6 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     }
 
     // Quota check
-    const dept = db.departments.find(d => d.id === doc.department_id);
     let isException = false;
     let quotaInfo = null;
 
