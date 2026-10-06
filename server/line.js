@@ -469,7 +469,7 @@ export function buildEmergencyAlertFlex(request, doctor, leaveType, koongPhone) 
           },
           {
             type: 'text',
-            text: `แผนกอายุรกรรม (${doctor.doctor_type === 'FULL_TIME' ? 'แพทย์ประจำ' : 'แพทย์พาร์ทไทม์'})`,
+            text: `${doctor.department_name || 'ไม่ระบุแผนก'} (${doctor.doctor_type === 'FULL_TIME' ? 'แพทย์ประจำ' : 'แพทย์พาร์ทไทม์'})`,
             size: 'sm',
             color: '#475569'
           },

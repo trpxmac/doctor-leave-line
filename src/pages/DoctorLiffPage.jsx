@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import imageCompression from 'browser-image-compression';
 import { useAuth } from '../context/AuthContext';
 import {
   Calendar,
@@ -122,7 +123,24 @@ export default function DoctorLiffPage() {
 
       if (files && files.length > 0) {
         for (let i = 0; i < files.length; i++) {
-          formData.append('attachments', files[i]);
+          const file = files[i];
+          if (file.type.startsWith('image/')) {
+            try {
+              const options = {
+                maxSizeMB: 0.5, // บีบให้เหลือไม่เกิน 500KB
+                maxWidthOrHeight: 1920,
+                useWebWorker: true,
+              };
+              const compressedFile = await imageCompression(file, options);
+              formData.append('attachments', compressedFile, file.name);
+            } catch (error) {
+              console.error('Image compression error:', error);
+              formData.append('attachments', file); // หากเกิดข้อผิดพลาดให้ส่งไฟล์ต้นฉบับ
+            }
+          } else {
+            // ไฟล์ที่ไม่ใช่รูปภาพ (เช่น PDF)
+            formData.append('attachments', file);
+          }
         }
       }
 

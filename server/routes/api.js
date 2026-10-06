@@ -36,14 +36,19 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit for bandwidth optimization
 });
 
 // Middleware that conditionally applies multer only when Content-Type is multipart/form-data
 const handleUpload = (req, res, next) => {
   if (req.is('multipart/form-data')) {
     upload.array('attachments', 3)(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ error: 'ขนาดไฟล์ใหญ่เกินไป (จำกัดไม่เกิน 2MB ต่อไฟล์)' });
+        }
+        return res.status(400).json({ error: err.message });
+      }
       next();
     });
   } else {
@@ -440,6 +445,10 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     const doc = db.doctors.find(d => d.id === doctor_id);
     if (!doc) return res.status(404).json({ error: 'Doctor not found' });
 
+    // Attach department name for Flex Messages
+    const dept = db.departments.find(dp => dp.id === doc.department_id);
+    doc.department_name = dept ? dept.name_th : 'ไม่ระบุแผนก';
+
     const leaveType = db.leave_types.find(lt => lt.id === leave_type_id);
     if (!leaveType) return res.status(404).json({ error: 'Leave type not found' });
 
@@ -461,6 +470,25 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     // Emergency check: start_date is today
     const today = getTodayString();
     const isEmergency = start_date === today;
+
+    // Notice days check
+    if (leaveType.min_notice_days > 0 && !isEmergency) {
+      const noticeDays = calculateDays(today, start_date) - 1;
+      if (noticeDays < leaveType.min_notice_days) {
+        return res.status(400).json({ error: `การลาประเภทนี้ต้องแจ้งล่วงหน้าอย่างน้อย ${leaveType.min_notice_days} วัน` });
+      }
+    }
+
+    // Balance check
+    const reqYear = new Date(start_date).getFullYear();
+    const balance = db.leave_balances.find(b => b.doctor_id === doctor_id && b.leave_type_id === leave_type_id && b.fiscal_year === reqYear);
+    if (balance) {
+      const total = Number(balance.entitlement_days) + Number(balance.carried_over_days);
+      const remaining = total - Number(balance.used_days) - Number(balance.pending_days);
+      if (remaining < durationDays) {
+        return res.status(400).json({ error: `วันลาคงเหลือไม่พอ (คงเหลือ ${remaining} วัน แต่ต้องการลา ${durationDays} วัน)` });
+      }
+    }
 
     // Quota check
     const dept = db.departments.find(d => d.id === doc.department_id);
@@ -574,7 +602,8 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
 
     // 2. Find Approver and send 1-on-1 Flex Message
     const route = db.approval_routes.find(r => r.doctor_id === doctor_id && r.step_order === 1);
-    const approverId = route ? route.approver_id : 'c0000000-0000-0000-0000-000000000002'; // Dr. Paravee default
+    const defaultApproverId = 'c0000000-0000-0000-0000-000000000002'; // Dr. Paravee default
+    const approverId = route ? route.approver_id : defaultApproverId; 
     const approver = db.doctors.find(d => d.id === approverId);
 
     if (approver && approver.line_user_id) {
@@ -939,11 +968,23 @@ router.post('/line/webhook', async (req, res) => {
               balance.updated_at = new Date().toISOString();
             }
 
+            // Get dynamic approver from LINE userId
+            const lineUserId = event.source && event.source.userId;
+            let approver = null;
+            if (lineUserId) {
+              approver = db.doctors.find(d => d.line_user_id === lineUserId);
+            }
+            if (!approver) {
+              approver = db.doctors.find(d => d.id === 'c0000000-0000-0000-0000-000000000002');
+            }
+            const approverName = approver ? `${approver.prefix_th}${approver.first_name_th} ${approver.last_name_th}` : 'นพ.ปารวี ชาญวิทย์';
+            const approverId = approver ? approver.id : 'c0000000-0000-0000-0000-000000000002';
+
             db.approval_logs.push({
               id: uuidv4(),
               request_id: reqItem.id,
               step_order: 1,
-              approver_id: 'c0000000-0000-0000-0000-000000000002',
+              approver_id: approverId,
               action: 'APPROVED',
               comments: 'อนุมัติผ่าน LINE 1-Click Postback',
               acted_at: new Date().toISOString()
@@ -955,7 +996,7 @@ router.post('/line/webhook', async (req, res) => {
             const doc = db.doctors.find(d => d.id === reqItem.doctor_id);
             const lt = db.leave_types.find(t => t.id === reqItem.leave_type_id);
             if (doc && doc.line_user_id) {
-              const flex = buildLeaveDecisionFlex(reqItem, doc, lt, 'APPROVED', 'นพ.ปารวี ชาญวิทย์', 'อนุมัติผ่าน LINE 1-Click');
+              const flex = buildLeaveDecisionFlex(reqItem, doc, lt, 'APPROVED', approverName, 'อนุมัติผ่าน LINE 1-Click');
               await sendLinePushMessage(doc.line_user_id, flex);
             }
           }
