@@ -52,11 +52,12 @@ export async function sendLinePushMessage(toLineUserId, messages) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       console.error('[LINE API Error]', res.status, data);
-      return { success: false, error: data, simulated: false };
+      const isQuotaError = res.status === 429 || (data.message && data.message.includes('quota'));
+      return { success: false, error: data, simulated: false, isQuotaError };
     }
 
     console.log(`[LINE API] 🚀 Successfully pushed message to ${toLineUserId}`);
-    return { success: true, data, simulated: false };
+    return { success: true, data, simulated: false, isQuotaError: false };
   } catch (err) {
     console.error('[LINE Network Error]', err);
     return { success: false, error: err.message, simulated: false };

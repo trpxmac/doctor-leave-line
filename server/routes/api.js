@@ -693,6 +693,8 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
       await sendLinePushMessage(doc.line_user_id, docFlex);
     }
 
+    let lineQuotaError = false;
+
     // 2. Find Approver and send 1-on-1 Flex Message
     const route = db.approval_routes.find(r => r.doctor_id === doctor_id && r.step_order === 1);
     const defaultApproverId = 'c0000000-0000-0000-0000-000000000002'; // Dr. Paravee default
@@ -701,7 +703,10 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
 
     if (approver && approver.line_user_id) {
       const approverFlex = buildApproverRequestFlex(newRequest, doc, leaveType, quotaInfo, appUrl);
-      await sendLinePushMessage(approver.line_user_id, approverFlex);
+      const resPush = await sendLinePushMessage(approver.line_user_id, approverFlex);
+      if (resPush.isQuotaError) {
+        lineQuotaError = true;
+      }
     }
 
     // 3. If Emergency: Send immediate Urgent alert to P'Koong (Medical Admin)
@@ -717,7 +722,8 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
       message: 'ยื่นใบลาสำเร็จ ระบบส่งแจ้งเตือนเข้า LINE เรียบร้อยแล้ว',
       request: newRequest,
       quota_warning: isException ? 'คำขอของท่านเกินโควตาประจำวันของแผนก และถูกบันทึกเป็นคำขอข้อยกเว้นพิเศษ' : null,
-      is_emergency: isEmergency
+      is_emergency: isEmergency,
+      line_quota_error: lineQuotaError
     });
   } catch (err) {
     console.error('Leave submission error:', err);

@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import apiRoutes from './routes/api.js';
+import { initCronJobs } from './cron.js';
 
 dotenv.config();
 
@@ -40,6 +41,9 @@ app.use((req, res, next) => {
     }
   });
 });
+
+// Initialize Cron Jobs
+initCronJobs();
 
 app.listen(PORT, () => {
   console.log(`====================================================`);

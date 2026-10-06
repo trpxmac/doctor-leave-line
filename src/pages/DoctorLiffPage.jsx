@@ -236,9 +236,19 @@ export default function DoctorLiffPage() {
                   ระบบได้ส่ง LINE Flex Message แบบ 1-on-1 ไปยังหัวหน้าแผนกเรียบร้อยแล้ว
                 </p>
                 {successResult.quota_warning && (
-                  <p className="mt-2 p-2 bg-amber-100/80 text-amber-800 rounded text-[11px] font-medium">
+                  <p className="mt-2 p-2 bg-amber-100/80 text-amber-800 rounded text-[11px] font-medium border border-amber-200">
                     ⚠️ {successResult.quota_warning}
                   </p>
+                )}
+                {successResult.line_quota_error && (
+                  <div className="mt-2 p-2 bg-rose-100 text-rose-800 rounded text-[11px] font-medium border border-rose-200">
+                    <p className="font-bold flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" /> แจ้งเตือนข้อความ LINE เต็ม!
+                    </p>
+                    <p className="mt-0.5">
+                      เนื่องจากโควตาส่งข้อความผ่าน LINE ของระบบเต็ม กรุณาโทรแจ้งหัวหน้าแผนกโดยตรง (ใบลาถูกบันทึกเข้าระบบแล้ว)
+                    </p>
+                  </div>
                 )}
                 <button
                   onClick={() => setSuccessResult(null)}
