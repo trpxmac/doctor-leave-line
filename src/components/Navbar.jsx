@@ -41,13 +41,16 @@ export default function Navbar() {
   }, []);
 
   const navItems = [
-    { to: '/', label: 'ยื่นใบลา (LIFF)', icon: FileText, desc: 'Doctor LIFF' },
-    { to: '/my-history', label: 'ประวัติการลา', icon: Clock, desc: 'My History' },
-    { to: '/approver', label: 'ศูนย์อนุมัติ', icon: CheckSquare, desc: 'Approver' },
-    { to: '/admin', label: 'ฝ่ายการแพทย์ (พี่กุ้ง)', icon: LayoutDashboard, desc: 'Admin' },
-    { to: '/admin/criteria', label: 'เกณฑ์โควตา', icon: Sliders, desc: 'Criteria' },
-    { to: '/admin/audit', label: 'Audit Log (PDPA)', icon: History, desc: 'Audit' },
-  ];
+    { to: '/', label: 'ยื่นใบลา (LIFF)', icon: FileText, desc: 'Doctor LIFF', allowedRoles: ['DOCTOR', 'ADMIN'] },
+    { to: '/my-history', label: 'ประวัติการลา', icon: Clock, desc: 'My History', allowedRoles: ['DOCTOR'] },
+    { to: '/approver', label: 'ศูนย์อนุมัติ', icon: CheckSquare, desc: 'Approver', allowedRoles: ['APPROVER'] },
+    { to: '/admin', label: 'ฝ่ายการแพทย์ (พี่กุ้ง)', icon: LayoutDashboard, desc: 'Admin', allowedRoles: ['ADMIN'] },
+    { to: '/admin/criteria', label: 'เกณฑ์โควตา', icon: Sliders, desc: 'Criteria', allowedRoles: ['ADMIN'] },
+    { to: '/admin/audit', label: 'Audit Log (PDPA)', icon: History, desc: 'Audit', allowedRoles: ['ADMIN'] },
+  ].filter(item => {
+    if (!currentDoctor) return false;
+    return item.allowedRoles.some(role => currentDoctor.roles.includes(role));
+  });
 
   return (
     <>

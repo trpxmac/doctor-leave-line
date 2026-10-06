@@ -66,12 +66,43 @@ function getTodayString() {
 }
 
 // Helper: Calculate duration between two dates
-function calculateDays(startDate, endDate) {
+function calculateDays(startDate, endDate, countMode = 'CALENDAR_DAYS', holidays = []) {
   const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
   const end = new Date(endDate);
-  const diffTime = Math.abs(end - start);
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-  return diffDays;
+  end.setHours(0, 0, 0, 0);
+  
+  if (countMode === 'CALENDAR_DAYS') {
+    const diffTime = Math.abs(end - start);
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  }
+
+  // countMode === 'WORKING_DAYS'
+  let days = 0;
+  const current = new Date(start);
+  
+  // Create a Set of holiday dates (YYYY-MM-DD)
+  const holidaySet = new Set(holidays.map(h => h.holiday_date));
+
+  while (current <= end) {
+    const dayOfWeek = current.getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // Sunday = 0, Saturday = 6
+    
+    const year = current.getFullYear();
+    const month = String(current.getMonth() + 1).padStart(2, '0');
+    const date = String(current.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${date}`;
+    
+    const isHoliday = holidaySet.has(dateStr);
+
+    if (!isWeekend && !isHoliday) {
+      days++;
+    }
+    
+    current.setDate(current.getDate() + 1);
+  }
+  
+  return days;
 }
 
 // -------------------------------------------------------------
@@ -93,6 +124,40 @@ router.get('/health', (req, res) => {
 router.post('/system/reset', (req, res) => {
   const freshDb = resetStore();
   res.json({ message: 'Database reset to initial BSI seed successfully', freshDb });
+});
+
+// -------------------------------------------------------------
+// AUTH & ONBOARDING (LIFF)
+// -------------------------------------------------------------
+router.get('/auth/me', (req, res) => {
+  const db = getDb();
+  const lineUserId = req.query.lineUserId;
+  if (!lineUserId) return res.status(400).json({ error: 'lineUserId is required' });
+
+  const doctor = db.doctors.find(d => d.line_user_id === lineUserId);
+  res.json({ doctor: doctor || null });
+});
+
+router.post('/auth/link', (req, res) => {
+  const db = getDb();
+  const { lineUserId, employeeId } = req.body;
+  if (!lineUserId || !employeeId) {
+    return res.status(400).json({ error: 'lineUserId and employeeId are required' });
+  }
+
+  const doctor = db.doctors.find(d => d.employee_id === employeeId);
+  if (!doctor) {
+    return res.status(404).json({ error: 'ไม่พบรหัสพนักงานนี้ในระบบ' });
+  }
+
+  if (doctor.line_user_id && doctor.line_user_id !== lineUserId) {
+    return res.status(400).json({ error: 'รหัสพนักงานนี้ผูกกับบัญชี LINE อื่นแล้ว' });
+  }
+
+  doctor.line_user_id = lineUserId;
+  saveStore();
+
+  res.json({ success: true, doctor });
 });
 
 // -------------------------------------------------------------
@@ -464,7 +529,12 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     if (half_day_type === 'MORNING' || half_day_type === 'AFTERNOON') {
       durationDays = 0.5;
     } else {
-      durationDays = calculateDays(start_date, end_date);
+      const holidays = db.holidays || [];
+      durationDays = calculateDays(start_date, end_date, leaveType.count_mode, holidays);
+    }
+
+    if (durationDays === 0) {
+      return res.status(400).json({ error: 'วันที่เลือกตรงกับวันหยุดทั้งหมด (ไม่นับเป็นวันลา)' });
     }
 
     // Emergency check: start_date is today
