@@ -55,13 +55,13 @@ async function runTests() {
       console.log(`   ✅ Dept: ${quota.department_name} | Max allowed: ${quota.max_allowed} | Current: ${quota.current_on_leave} | Status: ${quota.status}`);
 
       // 6. Submit a Leave Request
-      console.log('\n6. Testing Leave Request Submission (Next Week Vacation)...');
-      const nextWeek = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+      console.log('\n6. Testing Leave Request Submission (Two Weeks Vacation)...');
+      const twoWeeks = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
       const formData = new URLSearchParams();
       formData.append('doctor_id', drChartchai.id);
       formData.append('leave_type_id', vacBal.leave_type_id);
-      formData.append('start_date', nextWeek);
-      formData.append('end_date', nextWeek);
+      formData.append('start_date', twoWeeks);
+      formData.append('end_date', twoWeeks);
       formData.append('half_day_type', 'FULL_DAY');
       formData.append('reason', 'ตรวจร่างกายและพักผ่อนประจำปี');
 
@@ -71,6 +71,7 @@ async function runTests() {
         body: formData.toString()
       });
       const submitData = await submitRes.json();
+      console.log('   ℹ️ submitData:', submitData);
       console.log('   ✅ Leave submitted successfully!');
       console.log('   📄 Request No:', submitData.request.request_no);
       console.log('   🚨 Is Emergency:', submitData.is_emergency);
@@ -104,7 +105,7 @@ async function runTests() {
       console.log('\n8. Testing Same-Day Emergency Leave Submission...');
       const emergFormData = new URLSearchParams();
       emergFormData.append('doctor_id', drChartchai.id);
-      emergFormData.append('leave_type_id', 'lt-2-sick');
+      emergFormData.append('leave_type_id', '22222222-2222-2222-2222-222222222222');
       emergFormData.append('start_date', todayStr);
       emergFormData.append('end_date', todayStr);
       emergFormData.append('half_day_type', 'FULL_DAY');
@@ -161,3 +162,4 @@ async function runTests() {
 }
 
 runTests();
+

@@ -62,6 +62,7 @@ CREATE TABLE doctors (
     phone VARCHAR(50),                                -- เบอร์โทรศัพท์สำหรับโทรฉุกเฉิน / OTP
     doctor_type doctor_type_enum NOT NULL DEFAULT 'FULL_TIME', -- 'FULL_TIME' หรือ 'PART_TIME'
     department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+    avatar VARCHAR(255),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -91,7 +92,8 @@ CREATE TABLE leave_types (
     allows_backdate BOOLEAN NOT NULL DEFAULT FALSE,     -- ลาย้อนหลังได้หรือไม่ (ป่วยได้, พักร้อนไม่ได้)
     is_full_time_only BOOLEAN NOT NULL DEFAULT TRUE,   -- ใช้ได้เฉพาะแพทย์ Full-time หรือไม่
     sort_order INT DEFAULT 1,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    color VARCHAR(50)
 );
 
 -- 8. Holidays (วันหยุดนักขัตฤกษ์ของ รพ.)

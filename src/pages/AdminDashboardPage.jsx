@@ -19,6 +19,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import CalendarView from '../components/CalendarView';
 
 export default function AdminDashboardPage() {
   const { doctors } = useAuth();
@@ -26,6 +27,7 @@ export default function AdminDashboardPage() {
   const [stats, setStats] = useState(null);
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState('list'); // 'list' or 'calendar'
 
   // Filter state
   const [deptFilter, setDeptFilter] = useState('ALL');
@@ -297,28 +299,54 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Main Table: Leave Requests Queue */}
+      {/* Main Table / Calendar Area */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden">
         
-        {/* Table Filters Header */}
-        <div className="p-4 border-b border-slate-200 flex flex-col md:flex-row items-center justify-between gap-3 bg-slate-50/50">
-          <div className="flex items-center gap-2 w-full md:w-auto">
-            <Search className="w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="ค้นหาชื่อแพทย์ หรือเลขที่ใบลา..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="text-xs p-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden w-full sm:w-64"
-            />
+        {/* Unified Filters & Toggle Header */}
+        <div className="p-4 border-b border-slate-200 flex flex-col xl:flex-row items-center justify-between gap-4 bg-slate-50/50">
+          
+          <div className="flex flex-col md:flex-row items-center gap-3 w-full xl:w-auto">
+            {/* View Toggle */}
+            <div className="flex items-center gap-1 bg-slate-200/60 p-1 rounded-xl border border-slate-200">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  viewMode === 'list' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                <span>รายการ</span>
+              </button>
+              <button
+                onClick={() => setViewMode('calendar')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  viewMode === 'calendar' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                <span>ปฏิทิน</span>
+              </button>
+            </div>
+
+            {/* Search */}
+            <div className="flex items-center gap-2 w-full md:w-auto bg-white border border-slate-200 rounded-xl px-3 py-1.5 focus-within:ring-2 focus-within:ring-sky-500 transition-all">
+              <Search className="w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="ค้นหาแพทย์, เลขที่ใบลา..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="text-xs bg-transparent border-none outline-hidden w-full sm:w-48 placeholder:text-slate-400"
+              />
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
             {/* Status Filter */}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="text-xs p-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-sky-500 font-medium"
+              className="text-xs p-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-sky-500 font-medium outline-hidden"
             >
               <option value="ALL">สถานะทั้งหมด</option>
               <option value="PENDING">รอการอนุมัติ (Pending)</option>
@@ -331,7 +359,7 @@ export default function AdminDashboardPage() {
             <select
               value={deptFilter}
               onChange={(e) => setDeptFilter(e.target.value)}
-              className="text-xs p-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-sky-500 font-medium"
+              className="text-xs p-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-sky-500 font-medium outline-hidden"
             >
               <option value="ALL">แผนกทั้งหมด</option>
               {stats?.departments?.map(d => (
@@ -343,8 +371,13 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Requests Table */}
-        <div className="overflow-x-auto">
+        {/* Content Area */}
+        {viewMode === 'calendar' ? (
+          <div className="animate-in fade-in zoom-in-95 duration-300">
+            <CalendarView requests={filteredRequests} />
+          </div>
+        ) : (
+          <div className="overflow-x-auto animate-in fade-in zoom-in-95 duration-300">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-100/75 text-slate-600 font-bold border-b border-slate-200">
               <tr>
@@ -426,7 +459,8 @@ export default function AdminDashboardPage() {
               )}
             </tbody>
           </table>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Modal: Override Approval */}

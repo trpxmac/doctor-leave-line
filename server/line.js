@@ -346,8 +346,7 @@ export function buildLeaveDecisionFlex(request, doctor, leaveType, action, appro
             text: 'โรงพยาบาลกรุงเทพสิริโรจน์',
             color: '#ffffff',
             size: 'xs',
-            weight: 'bold',
-            opacity: 0.85
+            weight: 'bold'
           },
           {
             type: 'text',

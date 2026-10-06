@@ -74,7 +74,7 @@ const getInitialSeedData = () => {
 
   const leave_types = [
     {
-      id: 'lt-1-vacation',
+      id: '11111111-1111-1111-1111-111111111111',
       code: 'VACATION',
       name_th: 'ลาพักผ่อน',
       name_en: 'Annual Leave',
@@ -90,7 +90,7 @@ const getInitialSeedData = () => {
       color: '#0ea5e9'
     },
     {
-      id: 'lt-2-sick',
+      id: '22222222-2222-2222-2222-222222222222',
       code: 'SICK',
       name_th: 'ลาป่วย',
       name_en: 'Sick Leave',
@@ -106,7 +106,7 @@ const getInitialSeedData = () => {
       color: '#ef4444'
     },
     {
-      id: 'lt-3-personal',
+      id: '33333333-3333-3333-3333-333333333333',
       code: 'PERSONAL',
       name_th: 'ลากิจ',
       name_en: 'Personal Leave',
@@ -122,7 +122,7 @@ const getInitialSeedData = () => {
       color: '#f59e0b'
     },
     {
-      id: 'lt-4-training',
+      id: '44444444-4444-4444-4444-444444444444',
       code: 'TRAINING',
       name_th: 'ลาฝึกอบรม / ประชุมวิชาการ',
       name_en: 'Training / Conference',
@@ -138,7 +138,7 @@ const getInitialSeedData = () => {
       color: '#8b5cf6'
     },
     {
-      id: 'lt-5-unpaid',
+      id: '55555555-5555-5555-5555-555555555555',
       code: 'UNPAID',
       name_th: 'ลาไม่รับค่าตอบแทน / งดออกตรวจ',
       name_en: 'Leave Without Pay',
@@ -154,7 +154,7 @@ const getInitialSeedData = () => {
       color: '#64748b'
     },
     {
-      id: 'lt-6-ordination',
+      id: '66666666-6666-6666-6666-666666666666',
       code: 'ORDINATION',
       name_th: 'ลาอุปสมบท',
       name_en: 'Ordination Leave',
@@ -170,7 +170,7 @@ const getInitialSeedData = () => {
       color: '#d97706'
     },
     {
-      id: 'lt-7-maternity',
+      id: '77777777-7777-7777-7777-777777777777',
       code: 'MATERNITY',
       name_th: 'ลาคลอดบุตร',
       name_en: 'Maternity Leave',
@@ -251,23 +251,23 @@ const getInitialSeedData = () => {
   ];
 
   const doctor_roles = [
-    { id: uuidv4(), doctor_id: 'c0000000-0000-0000-0000-000000000001', role: 'MEDICAL_ADMIN' },
-    { id: uuidv4(), doctor_id: 'c0000000-0000-0000-0000-000000000002', role: 'DEPT_HEAD' },
-    { id: uuidv4(), doctor_id: 'c0000000-0000-0000-0000-000000000002', role: 'DOCTOR' },
-    { id: uuidv4(), doctor_id: 'c0000000-0000-0000-0000-000000000003', role: 'DOCTOR' },
-    { id: uuidv4(), doctor_id: 'c0000000-0000-0000-0000-000000000004', role: 'DOCTOR' }
+    { id: '00000000-0000-0000-0000-000000001000', doctor_id: 'c0000000-0000-0000-0000-000000000001', role: 'MEDICAL_ADMIN' },
+    { id: '00000000-0000-0000-0000-000000001001', doctor_id: 'c0000000-0000-0000-0000-000000000002', role: 'DEPT_HEAD' },
+    { id: '00000000-0000-0000-0000-000000001002', doctor_id: 'c0000000-0000-0000-0000-000000000002', role: 'DOCTOR' },
+    { id: '00000000-0000-0000-0000-000000001003', doctor_id: 'c0000000-0000-0000-0000-000000000003', role: 'DOCTOR' },
+    { id: '00000000-0000-0000-0000-000000001004', doctor_id: 'c0000000-0000-0000-0000-000000000004', role: 'DOCTOR' }
   ];
 
   const approval_routes = [
     {
-      id: uuidv4(),
+      id: '00000000-0000-0000-0000-000000001005',
       doctor_id: 'c0000000-0000-0000-0000-000000000003',
       step_order: 1,
       approver_id: 'c0000000-0000-0000-0000-000000000002', // Dr. Paravee
       is_active: true
     },
     {
-      id: uuidv4(),
+      id: '00000000-0000-0000-0000-000000001006',
       doctor_id: 'c0000000-0000-0000-0000-000000000004',
       step_order: 1,
       approver_id: 'c0000000-0000-0000-0000-000000000002', // Dr. Paravee
@@ -281,9 +281,9 @@ const getInitialSeedData = () => {
   const leave_balances = [
     // Dr. Chartchai (FT)
     {
-      id: uuidv4(),
+      id: '00000000-0000-0000-0000-000000001007',
       doctor_id: 'c0000000-0000-0000-0000-000000000003',
-      leave_type_id: 'lt-1-vacation',
+      leave_type_id: '11111111-1111-1111-1111-111111111111',
       fiscal_year: currentYear,
       entitlement_days: 10.0,
       carried_over_days: 2.0,
@@ -292,9 +292,9 @@ const getInitialSeedData = () => {
       updated_at: new Date().toISOString()
     },
     {
-      id: uuidv4(),
+      id: '00000000-0000-0000-0000-000000001008',
       doctor_id: 'c0000000-0000-0000-0000-000000000003',
-      leave_type_id: 'lt-2-sick',
+      leave_type_id: '22222222-2222-2222-2222-222222222222',
       fiscal_year: currentYear,
       entitlement_days: 30.0,
       carried_over_days: 0.0,
@@ -303,9 +303,9 @@ const getInitialSeedData = () => {
       updated_at: new Date().toISOString()
     },
     {
-      id: uuidv4(),
+      id: '00000000-0000-0000-0000-000000001009',
       doctor_id: 'c0000000-0000-0000-0000-000000000003',
-      leave_type_id: 'lt-3-personal',
+      leave_type_id: '33333333-3333-3333-3333-333333333333',
       fiscal_year: currentYear,
       entitlement_days: 5.0,
       carried_over_days: 0.0,
@@ -314,9 +314,9 @@ const getInitialSeedData = () => {
       updated_at: new Date().toISOString()
     },
     {
-      id: uuidv4(),
+      id: '00000000-0000-0000-0000-000000001010',
       doctor_id: 'c0000000-0000-0000-0000-000000000003',
-      leave_type_id: 'lt-4-training',
+      leave_type_id: '44444444-4444-4444-4444-444444444444',
       fiscal_year: currentYear,
       entitlement_days: 10.0,
       carried_over_days: 0.0,
@@ -326,9 +326,9 @@ const getInitialSeedData = () => {
     },
     // Dr. Paravee (FT)
     {
-      id: uuidv4(),
+      id: '00000000-0000-0000-0000-000000001011',
       doctor_id: 'c0000000-0000-0000-0000-000000000002',
-      leave_type_id: 'lt-1-vacation',
+      leave_type_id: '11111111-1111-1111-1111-111111111111',
       fiscal_year: currentYear,
       entitlement_days: 15.0,
       carried_over_days: 5.0,
@@ -337,9 +337,9 @@ const getInitialSeedData = () => {
       updated_at: new Date().toISOString()
     },
     {
-      id: uuidv4(),
+      id: '00000000-0000-0000-0000-000000001012',
       doctor_id: 'c0000000-0000-0000-0000-000000000002',
-      leave_type_id: 'lt-2-sick',
+      leave_type_id: '22222222-2222-2222-2222-222222222222',
       fiscal_year: currentYear,
       entitlement_days: 30.0,
       carried_over_days: 0.0,
@@ -356,10 +356,10 @@ const getInitialSeedData = () => {
 
   const leave_requests = [
     {
-      id: 'req-sample-001',
+      id: '88888888-8888-8888-8888-888888888888',
       request_no: `LV-${currentYear}-00001`,
       doctor_id: 'c0000000-0000-0000-0000-000000000003',
-      leave_type_id: 'lt-1-vacation',
+      leave_type_id: '11111111-1111-1111-1111-111111111111',
       start_date: nextWeekStr,
       end_date: nextWeekStr,
       duration_days: 1.0,
@@ -377,24 +377,24 @@ const getInitialSeedData = () => {
   ];
 
   // Link initial pending days for req-sample-001
-  const vacationBal = leave_balances.find(b => b.doctor_id === 'c0000000-0000-0000-0000-000000000003' && b.leave_type_id === 'lt-1-vacation');
+  const vacationBal = leave_balances.find(b => b.doctor_id === 'c0000000-0000-0000-0000-000000000003' && b.leave_type_id === '11111111-1111-1111-1111-111111111111');
   if (vacationBal) {
     vacationBal.pending_days = 1.0;
   }
 
   const holidays = [
-    { id: uuidv4(), holiday_date: `${currentYear}-01-01`, name_th: 'วันขึ้นปีใหม่', is_active: true },
-    { id: uuidv4(), holiday_date: `${currentYear}-04-13`, name_th: 'วันสงกรานต์', is_active: true },
-    { id: uuidv4(), holiday_date: `${currentYear}-05-01`, name_th: 'วันแรงงานแห่งชาติ', is_active: true },
-    { id: uuidv4(), holiday_date: `${currentYear}-12-05`, name_th: 'วันคล้ายวันพระบรมราชสมภพ ร.9', is_active: true }
+    { id: '00000000-0000-0000-0000-000000001013', holiday_date: `${currentYear}-01-01`, name_th: 'วันขึ้นปีใหม่', is_active: true },
+    { id: '00000000-0000-0000-0000-000000001014', holiday_date: `${currentYear}-04-13`, name_th: 'วันสงกรานต์', is_active: true },
+    { id: '00000000-0000-0000-0000-000000001015', holiday_date: `${currentYear}-05-01`, name_th: 'วันแรงงานแห่งชาติ', is_active: true },
+    { id: '00000000-0000-0000-0000-000000001016', holiday_date: `${currentYear}-12-05`, name_th: 'วันคล้ายวันพระบรมราชสมภพ ร.9', is_active: true }
   ];
 
   const approval_logs = [];
   const audit_logs = [
     {
-      id: uuidv4(),
+      id: '00000000-0000-0000-0000-000000001017',
       table_name: 'leave_requests',
-      record_id: 'req-sample-001',
+      record_id: '88888888-8888-8888-8888-888888888888',
       action: 'INSERT',
       actor_id: 'c0000000-0000-0000-0000-000000000003',
       new_data: { request_no: `LV-${currentYear}-00001`, status: 'PENDING' },
@@ -474,3 +474,4 @@ export const resetStore = () => {
   saveStore();
   return db;
 };
+
