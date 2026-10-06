@@ -176,12 +176,27 @@ approver_id: 'c0000000-0000-0000-0000-000000000002',
 
 ---
 
+## 🟢 Phase 4: Master Data & Legacy System Replacement (Future Scope)
+
+จากการวิเคราะห์คู่มือระบบเก่า (Doctor Schedule) หากต้องการให้ระบบใหม่ทดแทนระบบเดิมได้ 100% จำเป็นต้องพัฒนาระบบหลังบ้านเพิ่มเติมดังนี้:
+
+| # | ฟีเจอร์ | หมายเหตุ |
+|---|---------|----------|
+| 22 | คำนวณสิทธิ์วันลาพักร้อนประจำปี (Tenure) | HR กำหนดวันที่เริ่มงาน และระบบคำนวณ/ทบวันลาให้ตามเงื่อนไขอัตโนมัติ (เช่น < 3 ปี ได้เพิ่ม 0.5 วัน/เดือน) |
+| 23 | จัดการวันหยุดนักขัตฤกษ์ (Public Holidays) | หน้า UI ให้ Admin เพิ่ม/ลบ/แก้ไข วันหยุดประจำปี |
+| 24 | ตั้งค่าโครงสร้างผู้อนุมัติ (Line Approve) | หน้า UI สำหรับผูกสายบังคับบัญชาแบบเจาะจงบุคคล (Approver 1, 2, 3) แทนที่การล็อกเป็นหัวหน้าแผนก |
+| 25 | จัดการรูปแบบการลา (Leave Types) | หน้า UI สำหรับเพิ่ม/ลด และตั้งค่ารูปแบบการลา |
+| 26 | ระบบจัดการตารางเวร (Shift & Schedule) | ระบบจัดตารางเวร (Consult, ER, Night Duty) และซิงก์ข้อมูลวันที่ลาไม่ให้ชนกับวันเข้าเวร |
+
+---
+
 ## 📊 แผนงานที่แนะนำ (Priority Order)
 
 ```mermaid
 graph TD
     A["🔴 Phase 1: Critical Fixes"] --> B["🟡 Phase 2: Business Logic"]
     B --> C["🔵 Phase 3: Production Ready"]
+    C --> D["🟢 Phase 4: Legacy Replacement"]
     
     A --> A1["1. LIFF Auth + Onboarding (Done)"]
     A --> A2["2. Rich Menu Design + Setup (Done)"]
@@ -201,6 +216,10 @@ graph TD
     C --> C2["12. LINE Webhook Security (Done)"]
     C --> C3["15. Calendar View (Done)"]
     C --> C4["18. Export Reports (Done)"]
+    
+    D --> D1["22. Tenure Leave Calculation"]
+    D --> D2["23. Master Data UI (Holidays, Approvers)"]
+    D --> D3["26. Shift Schedule Management"]
 ```
 
 ---
