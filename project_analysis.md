@@ -169,7 +169,7 @@ approver_id: 'c0000000-0000-0000-0000-000000000002',
 | 15 | Calendar View (ปฏิทินแสดงรายการลา) ใน Admin Dashboard | ✅ เสร็จ - สร้าง CalendarView แบบ Grid พร้อมรองรับระบบ Filter ข้อมูล |
 | 16 | Multi-step Approval (หลายขั้น) | Schema รองรับแล้ว (`step_order`) แต่ Logic ยังรองรับแค่ 1 ขั้น |
 | 17 | LINE Signature Verification (Webhook Security) | ✅ เสร็จ - ตรวจสอบ X-Line-Signature แบบ HMAC-SHA256 ป้องกันแฮกเกอร์ยิง API ปลอม |
-| 18 | Export รายงานสรุปประจำเดือน (CSV/Excel) | PRD ระบุสำหรับ HR |
+| 18 | Export รายงานสรุปประจำเดือน (CSV/Excel) | ✅ เสร็จ - ฝ่าย HR/Admin สามารถดาวน์โหลด CSV ได้จากหน้า Dashboard |
 | 19 | แอดมินจัดการ Master Data (CRUD แพทย์, แผนก) | ตอนนี้ข้อมูลมาจาก Seed เท่านั้น |
 | 20 | RLS (Row Level Security) บน Supabase | Schema เขียน Table แล้วแต่ยังไม่มี RLS Policies |
 | 21 | Client-side Caching (Master Data) | ใช้ React Query เพื่อ Cache รายชื่อแผนก/ประเภทการลา ลดโหลด API (ไม่ทำกับระบบโควตา) |
@@ -200,7 +200,7 @@ graph TD
     C --> C1["11. Deployment Config (Ready)"]
     C --> C2["12. LINE Webhook Security (Done)"]
     C --> C3["15. Calendar View (Done)"]
-    C --> C4["18. Export Reports"]
+    C --> C4["18. Export Reports (Done)"]
 ```
 
 ---

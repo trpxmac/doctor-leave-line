@@ -16,7 +16,8 @@ import {
   Search,
   RefreshCw,
   Hospital,
-  ChevronRight
+  ChevronRight,
+  Download
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import CalendarView from '../components/CalendarView';
@@ -64,6 +65,44 @@ export default function AdminDashboardPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const exportToCSV = () => {
+    // Export filtered requests if there are any, otherwise all requests (unless completely empty)
+    const dataToExport = filteredRequests.length > 0 ? filteredRequests : requests;
+    if (dataToExport.length === 0) return alert('ไม่มีข้อมูลสำหรับดาวน์โหลด');
+
+    const headers = [
+      'เลขที่ใบลา', 'รหัสแพทย์', 'ชื่อแพทย์', 'ประเภทแพทย์', 'แผนก', 'ประเภทการลา',
+      'เริ่มวันที่', 'ถึงวันที่', 'จำนวนวัน', 'รูปแบบ', 'สถานะ', 'เหตุผล'
+    ];
+
+    const rows = dataToExport.map(req => [
+      req.request_no || '',
+      req.doctor?.employee_id || '',
+      req.doctor?.name || '',
+      req.doctor?.doctor_type === 'FULL_TIME' ? 'Full-Time' : 'Part-Time',
+      req.doctor?.department_name || '',
+      req.leave_type?.name_th || '',
+      req.start_date || '',
+      req.end_date || '',
+      req.duration_days || '',
+      req.half_day_type === 'FULL_DAY' ? 'เต็มวัน' : req.half_day_type === 'MORNING' ? 'ครึ่งเช้า' : 'ครึ่งบ่าย',
+      req.status || '',
+      `"${(req.reason || '').replace(/"/g, '""')}"` // Escape quotes for CSV
+    ]);
+
+    // Add BOM for Excel Thai UTF-8 support
+    const csvContent = '\uFEFF' + [headers, ...rows].map(e => e.join(',')).join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `leave_report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   useEffect(() => {
@@ -168,6 +207,14 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={exportToCSV}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-98"
+          >
+            <Download className="w-4 h-4" />
+            <span>ดาวน์โหลด (CSV)</span>
+          </button>
+
           <button
             onClick={() => setShowCreateModal(true)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#006699] hover:bg-[#005580] text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-98"
