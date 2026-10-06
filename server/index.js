@@ -42,13 +42,21 @@ app.use((req, res, next) => {
   });
 });
 
+import { initStore } from './db.js';
+
 // Initialize Cron Jobs
 initCronJobs();
 
-app.listen(PORT, () => {
-  console.log(`====================================================`);
-  console.log(`🏥 Doctor Leave @ LINE Server`);
-  console.log(`📍 Running on http://localhost:${PORT}`);
-  console.log(`📡 API Base: http://localhost:${PORT}/api`);
-  console.log(`====================================================`);
+// Initialize DB and start server
+initStore().then(() => {
+  app.listen(PORT, () => {
+    console.log(`====================================================`);
+    console.log(`🏥 Doctor Leave @ LINE Server`);
+    console.log(`📍 Running on http://localhost:${PORT}`);
+    console.log(`📡 API Base: http://localhost:${PORT}/api`);
+    console.log(`====================================================`);
+  });
+}).catch(err => {
+  console.error('Failed to initialize database:', err);
+  process.exit(1);
 });

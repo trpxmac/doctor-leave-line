@@ -424,24 +424,43 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+// --- Initialization ---
 let db = null;
-if (fs.existsSync(DATA_FILE)) {
-  try {
-    const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-    db = JSON.parse(raw);
-  } catch (err) {
-    console.warn('Error reading store.json, resetting to seed:', err.message);
-    db = getInitialSeedData();
-    fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2), 'utf-8');
+
+export const initStore = async () => {
+  const { loadStoreFromSupabase } = await import('./supabase_sync.js');
+  let fallbackDb = null;
+  
+  if (fs.existsSync(DATA_FILE)) {
+    try {
+      const raw = fs.readFileSync(DATA_FILE, 'utf-8');
+      fallbackDb = JSON.parse(raw);
+    } catch (err) {
+      console.warn('Error reading store.json, resetting to seed:', err.message);
+      fallbackDb = getInitialSeedData();
+    }
+  } else {
+    fallbackDb = getInitialSeedData();
   }
-} else {
-  db = getInitialSeedData();
+
+  // Load from Supabase (or use fallback if disconnected)
+  db = await loadStoreFromSupabase(fallbackDb);
+  
+  // Save the merged/fetched data back to local store
   fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2), 'utf-8');
-}
+};
+
 
 export const saveStore = () => {
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2), 'utf-8');
+    
+    // Background sync to Supabase
+    if (isSupabaseConfigured && supabase) {
+      import('./supabase_sync.js').then(({ syncStoreToSupabase }) => {
+        syncStoreToSupabase(db);
+      }).catch(err => console.error('Failed to load sync module:', err));
+    }
   } catch (err) {
     console.error('Failed to save store.json:', err);
   }
