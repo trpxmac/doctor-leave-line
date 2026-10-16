@@ -351,11 +351,11 @@ export default function DoctorLiffPage() {
 
             <div className="flex items-center gap-2 mt-1">
               <a
-                href="tel:XXX-XXX-XXXX"
+                href="tel:076361888"
                 className="flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
               >
                 <Phone className="w-3.5 h-3.5" />
-                <span>โทรหาพี่กุ้ง (XXX-XXX-XXXX)</span>
+                <span>โทรหาพี่กุ้ง (076-361-888)</span>
               </a>
               <div className="text-[10px] text-rose-600 font-semibold px-2 py-1 bg-white rounded border border-rose-200">
                 ระบบจะส่ง Push Alert ด่วน
