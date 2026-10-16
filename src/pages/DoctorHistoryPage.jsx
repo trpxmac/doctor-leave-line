@@ -9,24 +9,27 @@ import {
   Paperclip,
   Trash2,
   RefreshCw,
-  FileText
+  FileText,
+  Sparkles
 } from 'lucide-react';
 
 export default function DoctorHistoryPage() {
   const { currentDoctor } = useAuth();
   const [requests, setRequests] = useState([]);
+  const [balances, setBalances] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('ALL');
 
-  const fetchRequests = async () => {
+  const fetchHistoryAndBalances = async () => {
     if (!currentDoctor) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/leave-requests?doctorId=${currentDoctor.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setRequests(data);
-      }
+      const [reqRes, balRes] = await Promise.all([
+        fetch(`/api/leave-requests?doctorId=${currentDoctor.id}`),
+        fetch(`/api/balances/${currentDoctor.id}`)
+      ]);
+      if (reqRes.ok) setRequests(await reqRes.json());
+      if (balRes.ok) setBalances(await balRes.json());
     } catch (err) {
       console.error(err);
     } finally {
@@ -35,7 +38,7 @@ export default function DoctorHistoryPage() {
   };
 
   useEffect(() => {
-    fetchRequests();
+    fetchHistoryAndBalances();
   }, [currentDoctor]);
 
   const handleCancel = async (requestId) => {
@@ -54,7 +57,7 @@ export default function DoctorHistoryPage() {
       });
 
       if (res.ok) {
-        fetchRequests();
+        fetchHistoryAndBalances();
       }
     } catch (err) {
       console.error(err);
@@ -107,7 +110,7 @@ export default function DoctorHistoryPage() {
         <div>
           <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             <FileText className="w-6 h-6 text-[#006699]" />
-            ประวัติการยื่นใบลาของฉัน
+            ประวัติการยื่นใบลา & สิทธิ์คงเหลือ
           </h1>
           <p className="text-xs text-slate-500 mt-1">
             แพทย์: {currentDoctor?.prefix_th}{currentDoctor?.first_name_th} {currentDoctor?.last_name_th} • แผนก{currentDoctor?.department_name}
@@ -115,12 +118,57 @@ export default function DoctorHistoryPage() {
         </div>
 
         <button
-          onClick={fetchRequests}
+          onClick={fetchHistoryAndBalances}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs self-start"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           รีเฟรชรายการ
         </button>
+      </div>
+
+      {/* Section 1: Doctor Leave Balances (สิทธิ์วันลาคงเหลือ) */}
+      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-[#006699]" />
+            <span>สิทธิ์วันลาคงเหลือประจำปี ({new Date().getFullYear()})</span>
+          </h2>
+          <span className="text-[10px] text-slate-400">อัปเดตแบบ Real-time</span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          {balances.length === 0 ? (
+            <div className="col-span-full text-center py-4 text-xs text-slate-400">
+              {currentDoctor?.doctor_type === 'PART_TIME'
+                ? 'แพทย์พาร์ทไทม์ไม่มีโควตาวันลาพักร้อน (ยื่นลาไม่รับค่าตอบแทนได้ตามจริง)'
+                : 'กำลังโหลดสิทธิ์คงเหลือ...'}
+            </div>
+          ) : (
+            balances.map(b => (
+              <div
+                key={b.id}
+                className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/80 hover:border-sky-300 transition-all shadow-2xs"
+              >
+                <div className="text-[11px] font-semibold text-slate-600 truncate">
+                  {b.leave_type_name}
+                </div>
+                <div className="mt-1 flex items-baseline justify-between">
+                  <span className="text-lg font-bold text-[#006699]">
+                    {b.remaining_days}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    / {b.total_quota} วัน
+                  </span>
+                </div>
+                {b.pending_days > 0 && (
+                  <div className="text-[9px] text-amber-600 font-medium mt-0.5">
+                    (รออนุมัติ {b.pending_days} วัน)
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       {/* Filter Tabs */}

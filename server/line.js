@@ -368,7 +368,7 @@ export function buildApproverRequestFlex(request, doctor, leaveType, quotaInfo, 
             action: {
               type: 'uri',
               label: '❌ ระบุเหตุผล / ไม่อนุมัติ',
-              uri: `${appUrl || 'http://localhost:5173'}/approver?id=${request.id}&action=reject`
+              uri: `https://liff.line.me/${process.env.VITE_LIFF_ID || process.env.LIFF_ID || '2011832574-WtcSrDre'}/approver?id=${request.id}&action=reject`
             }
           }
         ]
@@ -583,7 +583,7 @@ export function buildEmergencyAlertFlex(request, doctor, leaveType, koongPhone) 
             action: {
               type: 'uri',
               label: '🖥️ เปิด Admin Dashboard',
-              uri: 'http://localhost:5173/admin'
+              uri: `https://liff.line.me/${process.env.VITE_LIFF_ID || process.env.LIFF_ID || '2011832574-WtcSrDre'}/admin`
             }
           }
         ]
