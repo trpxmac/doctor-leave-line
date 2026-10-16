@@ -15,13 +15,25 @@ import AdminShiftsPage from './pages/AdminShiftsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import OnboardingPage from './pages/OnboardingPage';
 
-// Intercepts LINE LIFF subpath/query routing (?liff.state=... or ?route=...)
+// Intercepts LINE LIFF subpath/query routing (?liff.state=... or ?route=... or sessionStorage)
 function LiffRedirectHandler() {
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
     try {
+      // 1. Check synchronous capture from sessionStorage
+      const savedTarget = sessionStorage.getItem('bsi_liff_target');
+      if (savedTarget) {
+        sessionStorage.removeItem('bsi_liff_target');
+        if (savedTarget !== location.pathname) {
+          console.log(`[LIFF Navigation] Redirecting to savedTarget: ${savedTarget}`);
+          navigate(savedTarget, { replace: true });
+          return;
+        }
+      }
+
+      // 2. Check window.location.search
       const searchParams = new URLSearchParams(window.location.search);
       const liffState = searchParams.get('liff.state');
       const routeParam = searchParams.get('route') || searchParams.get('path');
@@ -31,6 +43,14 @@ function LiffRedirectHandler() {
         targetPath = decodeURIComponent(liffState);
       } else if (routeParam) {
         targetPath = decodeURIComponent(routeParam);
+      }
+
+      // 3. Check window.location.hash
+      if (!targetPath && window.location.hash) {
+        const hash = window.location.hash.replace(/^#/, '');
+        if (hash.startsWith('/') && hash !== location.pathname) {
+          targetPath = hash;
+        }
       }
 
       if (targetPath && targetPath !== location.pathname) {
