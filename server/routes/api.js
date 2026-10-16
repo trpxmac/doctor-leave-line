@@ -1490,4 +1490,277 @@ router.post('/calculate-duration', (req, res) => {
   });
 });
 
+// -------------------------------------------------------------
+// TENURE LEAVE CALCULATION (PHASE 4 - ITEM 22)
+// -------------------------------------------------------------
+
+function calculateTenure(hireDateStr, asOfDate = new Date()) {
+  if (!hireDateStr) return { years: 0, months: 0, days: 0, formatted: 'ไม่ระบุวันเริ่มงาน' };
+  const hire = new Date(hireDateStr);
+  const target = new Date(asOfDate);
+  if (hire > target) return { years: 0, months: 0, days: 0, formatted: '0 เดือน (เริ่มงานในอนาคต)' };
+
+  let years = target.getFullYear() - hire.getFullYear();
+  let months = target.getMonth() - hire.getMonth();
+  let days = target.getDate() - hire.getDate();
+
+  if (days < 0) {
+    months -= 1;
+    const prevMonthLastDay = new Date(target.getFullYear(), target.getMonth(), 0).getDate();
+    days += prevMonthLastDay;
+  }
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  let formatted = '';
+  if (years > 0) formatted += `${years} ปี `;
+  formatted += `${months} เดือน`;
+  if (years === 0 && months === 0) formatted = `${days} วัน`;
+
+  return { years, months, days, formatted: formatted.trim() };
+}
+
+function calculateVacationEntitlement(doctor, tenure, rules, targetYear, settings) {
+  if (doctor.doctor_type === 'PART_TIME' && !settings?.allow_part_time) {
+    return { entitlement: 0, rule_applied: 'แพทย์พาร์ทไทม์ (ไม่มีสิทธิ์ลาพักผ่อน)' };
+  }
+
+  const sortedRules = [...rules].sort((a, b) => a.min_years - b.min_years);
+  const matchedRule = sortedRules.find(r => tenure.years >= r.min_years && tenure.years < r.max_years)
+    || sortedRules[sortedRules.length - 1];
+
+  if (!matchedRule) {
+    return { entitlement: 6.0, rule_applied: 'เกณฑ์เริ่มต้นมาตรฐาน 6 วัน' };
+  }
+
+  // First year prorated calculation
+  if (matchedRule.min_years === 0 && matchedRule.prorate_monthly > 0) {
+    const hire = new Date(doctor.hire_date);
+    if (hire.getFullYear() === targetYear) {
+      const workedMonths = Math.max(1, 12 - hire.getMonth());
+      const prorated = Math.min(matchedRule.entitlement_days, Math.round(workedMonths * matchedRule.prorate_monthly * 2) / 2);
+      return {
+        entitlement: prorated,
+        rule_applied: `ปีแรก สะสมตามสัดส่วน ${workedMonths} เดือน (${prorated} วัน)`
+      };
+    }
+  }
+
+  return {
+    entitlement: matchedRule.entitlement_days,
+    rule_applied: matchedRule.description
+  };
+}
+
+// GET /api/tenure/rules - Get tenure rules and settings
+router.get('/tenure/rules', (req, res) => {
+  const db = getDb();
+  res.json({
+    rules: db.tenure_rules || [],
+    settings: db.tenure_settings || { max_carry_over_days: 5.0, allow_part_time: false }
+  });
+});
+
+// PUT /api/tenure/rules - Update tenure rules and settings
+router.put('/tenure/rules', (req, res) => {
+  const db = getDb();
+  const { rules, settings, actor_id } = req.body;
+
+  if (rules && Array.isArray(rules)) {
+    db.tenure_rules = rules;
+  }
+  if (settings) {
+    db.tenure_settings = { ...db.tenure_settings, ...settings };
+  }
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'tenure_rules',
+    record_id: 'settings',
+    action: 'UPDATE',
+    actor_id: actor_id || null,
+    new_data: { rules: db.tenure_rules, settings: db.tenure_settings },
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.json({ message: 'บันทึกเกณฑ์การคำนวณอายุงานสำเร็จ', rules: db.tenure_rules, settings: db.tenure_settings });
+});
+
+// PUT /api/doctors/:id/hire-date - Update doctor's hire date
+router.put('/doctors/:id/hire-date', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  const { hire_date, actor_id } = req.body;
+
+  const doctor = db.doctors.find(d => d.id === id);
+  if (!doctor) {
+    return res.status(404).json({ error: 'ไม่พบข้อมูลแพทย์' });
+  }
+
+  if (!hire_date || !/^\d{4}-\d{2}-\d{2}$/.test(hire_date)) {
+    return res.status(400).json({ error: 'รูปแบบวันที่ไม่ถูกต้อง (ต้องเป็น YYYY-MM-DD)' });
+  }
+
+  const oldDate = doctor.hire_date;
+  doctor.hire_date = hire_date;
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'doctors',
+    record_id: id,
+    action: 'UPDATE',
+    actor_id: actor_id || null,
+    old_data: { hire_date: oldDate },
+    new_data: { hire_date },
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.json({ message: 'บันทึกวันเริ่มงานสำเร็จ', doctor });
+});
+
+// GET /api/tenure/preview - Preview vacation leave calculation based on tenure for a given year
+router.get('/tenure/preview', (req, res) => {
+  const db = getDb();
+  const targetYear = parseInt(req.query.year, 10) || new Date().getFullYear();
+  const rules = db.tenure_rules || [];
+  const settings = db.tenure_settings || { max_carry_over_days: 5.0, allow_part_time: false };
+  const vacationType = db.leave_types.find(lt => lt.code === 'VACATION') || db.leave_types[0];
+
+  const asOfDate = new Date(`${targetYear}-12-31`);
+  const prevYear = targetYear - 1;
+
+  const previewList = db.doctors.map(doctor => {
+    const tenure = calculateTenure(doctor.hire_date, asOfDate);
+    const { entitlement, rule_applied } = calculateVacationEntitlement(doctor, tenure, rules, targetYear, settings);
+
+    const currentBalance = db.leave_balances.find(
+      b => b.doctor_id === doctor.id && b.leave_type_id === vacationType.id && b.fiscal_year === targetYear
+    );
+
+    const prevBalance = db.leave_balances.find(
+      b => b.doctor_id === doctor.id && b.leave_type_id === vacationType.id && b.fiscal_year === prevYear
+    );
+
+    let proposedCarryOver = 0;
+    if (prevBalance) {
+      const remainingPrev = (prevBalance.entitlement_days + prevBalance.carried_over_days) - (prevBalance.used_days + prevBalance.pending_days);
+      if (remainingPrev > 0) {
+        proposedCarryOver = Math.min(remainingPrev, settings.max_carry_over_days);
+      }
+    }
+
+    const dept = db.departments.find(d => d.id === doctor.department_id);
+
+    return {
+      doctor_id: doctor.id,
+      employee_id: doctor.employee_id,
+      doctor_name: `${doctor.prefix_th}${doctor.first_name_th} ${doctor.last_name_th}`,
+      doctor_type: doctor.doctor_type,
+      department_name: dept?.name_th || 'ไม่ระบุ',
+      hire_date: doctor.hire_date || null,
+      tenure,
+      calculated_entitlement: entitlement,
+      rule_applied,
+      current_entitlement: currentBalance ? currentBalance.entitlement_days : null,
+      current_carried_over: currentBalance ? currentBalance.carried_over_days : 0,
+      proposed_carried_over: proposedCarryOver,
+      has_change: currentBalance ? currentBalance.entitlement_days !== entitlement : true
+    };
+  });
+
+  res.json({
+    year: targetYear,
+    preview: previewList,
+    total_doctors: previewList.length,
+    rules,
+    settings
+  });
+});
+
+// POST /api/tenure/apply - Batch apply calculated vacation entitlements into leave_balances
+router.post('/tenure/apply', (req, res) => {
+  const db = getDb();
+  const targetYear = parseInt(req.body.year, 10) || new Date().getFullYear();
+  const applyCarryOver = req.body.apply_carry_over !== false;
+  const actorId = req.body.actor_id || null;
+
+  const rules = db.tenure_rules || [];
+  const settings = db.tenure_settings || { max_carry_over_days: 5.0, allow_part_time: false };
+  const vacationType = db.leave_types.find(lt => lt.code === 'VACATION') || db.leave_types[0];
+
+  const asOfDate = new Date(`${targetYear}-12-31`);
+  const prevYear = targetYear - 1;
+  let updatedCount = 0;
+  let insertedCount = 0;
+
+  db.doctors.forEach(doctor => {
+    const tenure = calculateTenure(doctor.hire_date, asOfDate);
+    const { entitlement } = calculateVacationEntitlement(doctor, tenure, rules, targetYear, settings);
+
+    let proposedCarryOver = 0;
+    if (applyCarryOver) {
+      const prevBalance = db.leave_balances.find(
+        b => b.doctor_id === doctor.id && b.leave_type_id === vacationType.id && b.fiscal_year === prevYear
+      );
+      if (prevBalance) {
+        const remainingPrev = (prevBalance.entitlement_days + prevBalance.carried_over_days) - (prevBalance.used_days + prevBalance.pending_days);
+        if (remainingPrev > 0) {
+          proposedCarryOver = Math.min(remainingPrev, settings.max_carry_over_days);
+        }
+      }
+    }
+
+    const existingIndex = db.leave_balances.findIndex(
+      b => b.doctor_id === doctor.id && b.leave_type_id === vacationType.id && b.fiscal_year === targetYear
+    );
+
+    if (existingIndex !== -1) {
+      db.leave_balances[existingIndex].entitlement_days = entitlement;
+      if (applyCarryOver) {
+        db.leave_balances[existingIndex].carried_over_days = proposedCarryOver;
+      }
+      db.leave_balances[existingIndex].updated_at = new Date().toISOString();
+      updatedCount++;
+    } else {
+      db.leave_balances.push({
+        id: uuidv4(),
+        doctor_id: doctor.id,
+        leave_type_id: vacationType.id,
+        fiscal_year: targetYear,
+        entitlement_days: entitlement,
+        carried_over_days: applyCarryOver ? proposedCarryOver : 0,
+        used_days: 0,
+        pending_days: 0,
+        updated_at: new Date().toISOString()
+      });
+      insertedCount++;
+    }
+  });
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'leave_balances',
+    record_id: `batch-tenure-${targetYear}`,
+    action: 'UPDATE',
+    actor_id: actorId,
+    new_data: { note: `Applied tenure vacation entitlements for year ${targetYear}`, updatedCount, insertedCount },
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.json({
+    message: `ประมวลผลสิทธิ์วันลาพักผ่อนประจำปี ${targetYear} สำเร็จ (${insertedCount} เพิ่มใหม่, ${updatedCount} ปรับปรุง)`,
+    year: targetYear,
+    updatedCount,
+    insertedCount
+  });
+});
+
 export default router;

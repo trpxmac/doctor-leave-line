@@ -11,7 +11,8 @@ import {
   MessageCircle,
   Menu,
   X,
-  CalendarDays
+  CalendarDays,
+  Award
 } from 'lucide-react';
 import PersonaSwitcher from './PersonaSwitcher';
 import LineSimulatorModal from './LineSimulatorModal';
@@ -49,6 +50,7 @@ export default function Navbar() {
     { to: '/admin/criteria', label: 'เกณฑ์โควตา', icon: Sliders, desc: 'Criteria', allowedRoles: ['MEDICAL_ADMIN', 'ADMIN'] },
     { to: '/admin/audit', label: 'Audit Log (PDPA)', icon: History, desc: 'Audit', allowedRoles: ['MEDICAL_ADMIN', 'ADMIN'] },
     { to: '/admin/holidays', label: 'วันหยุด รพ.', icon: CalendarDays, desc: 'Holidays', allowedRoles: ['MEDICAL_ADMIN', 'ADMIN'] },
+    { to: '/admin/tenure', label: 'คำนวณอายุงาน', icon: Award, desc: 'Tenure', allowedRoles: ['MEDICAL_ADMIN', 'ADMIN'] },
   ].filter(item => {
     if (!currentDoctor) return false;
     return item.allowedRoles.some(role => currentDoctor.roles.includes(role));

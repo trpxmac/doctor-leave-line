@@ -194,7 +194,40 @@ async function runTests() {
       const delResult = await delHolRes.json();
       console.log(`   ✅ Deleted test holiday: ${delResult.message}`);
 
-      console.log('\n🎉 ALL 13 WORKFLOW TESTS PASSED PERFECTLY!\n');
+      // 14. Test Tenure Leave Calculation (Phase 4 - Item 22)
+      console.log('\n14. Testing Tenure Leave Calculation (Phase 4)...');
+      const rulesRes = await fetch(`${baseUrl}/tenure/rules`);
+      const rulesData = await rulesRes.json();
+      console.log(`   ✅ Tenure rules fetched: ${rulesData.rules.length} tiers | Max carry-over: ${rulesData.settings.max_carry_over_days} days`);
+
+      const previewRes = await fetch(`${baseUrl}/tenure/preview?year=2026`);
+      const previewResult = await previewRes.json();
+      console.log(`   ✅ Tenure preview for year ${previewResult.year}: ${previewResult.total_doctors} doctors evaluated`);
+      const drC = previewResult.preview.find(d => d.employee_id === 'DOC-002');
+      console.log(`      • ${drC.doctor_name} (${drC.hire_date}): tenure ${drC.tenure.formatted} -> Calculated: ${drC.calculated_entitlement} days (${drC.rule_applied})`);
+
+      const hireRes = await fetch(`${baseUrl}/doctors/${drC.doctor_id}/hire-date`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hire_date: '2019-01-01' })
+      });
+      const hireData = await hireRes.json();
+      console.log(`   ✅ Updated hire date for Dr. Chartchai to: ${hireData.doctor.hire_date}`);
+
+      const previewRes2 = await fetch(`${baseUrl}/tenure/preview?year=2026`);
+      const previewResult2 = await previewRes2.json();
+      const drC2 = previewResult2.preview.find(d => d.employee_id === 'DOC-002');
+      console.log(`   ✅ Recalculated entitlement after tenure change: ${drC2.calculated_entitlement} days (${drC2.rule_applied})`);
+
+      const applyRes = await fetch(`${baseUrl}/tenure/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year: 2026, apply_carry_over: true })
+      });
+      const applyData = await applyRes.json();
+      console.log(`   ✅ Batch applied tenure entitlements: ${applyData.message}`);
+
+      console.log('\n🎉 ALL 14 WORKFLOW TESTS PASSED PERFECTLY!\n');
     } catch (err) {
       console.error('❌ Test failed:', err);
     } finally {

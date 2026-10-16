@@ -18,7 +18,8 @@ import {
   Hospital,
   ChevronRight,
   Download,
-  CalendarDays
+  CalendarDays,
+  Award
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import CalendarView from '../components/CalendarView';
@@ -221,7 +222,15 @@ export default function AdminDashboardPage() {
             className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-sky-50 hover:bg-sky-100 text-[#006699] border border-sky-200 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-98"
           >
             <CalendarDays className="w-4 h-4 text-[#006699]" />
-            <span>ปฏิทินวันหยุด รพ.</span>
+            <span>ปฏิทินวันหยุด</span>
+          </Link>
+
+          <Link
+            to="/admin/tenure"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-98"
+          >
+            <Award className="w-4 h-4 text-amber-700" />
+            <span>คำนวณอายุงาน</span>
           </Link>
 
           <button

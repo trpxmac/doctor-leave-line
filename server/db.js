@@ -199,6 +199,7 @@ const getInitialSeedData = () => {
       department_id: 'd1111111-1111-1111-1111-111111111111',
       phone: '076-361888',
       email: 'koong_med@bsi.hospital',
+      hire_date: '2018-05-01',
       is_active: true,
       avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
       created_at: new Date().toISOString()
@@ -214,6 +215,7 @@ const getInitialSeedData = () => {
       department_id: 'd1111111-1111-1111-1111-111111111111',
       phone: '081-1112233',
       email: 'paravee.c@bsi.hospital',
+      hire_date: '2020-01-15',
       is_active: true,
       avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=150&auto=format&fit=crop&q=80',
       created_at: new Date().toISOString()
@@ -229,6 +231,7 @@ const getInitialSeedData = () => {
       department_id: 'd1111111-1111-1111-1111-111111111111',
       phone: '082-2223344',
       email: 'chartchai.v@bsi.hospital',
+      hire_date: '2023-06-01',
       is_active: true,
       avatar: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150&auto=format&fit=crop&q=80',
       created_at: new Date().toISOString()
@@ -244,6 +247,7 @@ const getInitialSeedData = () => {
       department_id: 'd1111111-1111-1111-1111-111111111111',
       phone: '083-3334455',
       email: 'kantheera.p@bsi.hospital',
+      hire_date: '2025-11-01',
       is_active: true,
       avatar: 'https://images.unsplash.com/photo-1594824813583-0570b240186c?w=150&auto=format&fit=crop&q=80',
       created_at: new Date().toISOString()
@@ -404,6 +408,20 @@ const getInitialSeedData = () => {
   ];
   const leave_attachments = [];
 
+  const tenure_rules = [
+    { id: '1', min_years: 0, max_years: 1, entitlement_days: 6.0, prorate_monthly: 0.5, description: 'ทำงานไม่ถึง 1 ปี (ได้ตามสัดส่วน 0.5 วัน/เดือนทำงาน)' },
+    { id: '2', min_years: 1, max_years: 3, entitlement_days: 6.0, prorate_monthly: 0, description: 'ทำงาน 1 - 3 ปี (สิทธิ์ 6 วันทำการ)' },
+    { id: '3', min_years: 3, max_years: 5, entitlement_days: 10.0, prorate_monthly: 0, description: 'ทำงาน 3 - 5 ปี (สิทธิ์ 10 วันทำการ)' },
+    { id: '4', min_years: 5, max_years: 10, entitlement_days: 12.0, prorate_monthly: 0, description: 'ทำงาน 5 - 10 ปี (สิทธิ์ 12 วันทำการ)' },
+    { id: '5', min_years: 10, max_years: 99, entitlement_days: 15.0, prorate_monthly: 0, description: 'ทำงาน 10 ปีขึ้นไป (สิทธิ์ 15 วันทำการ)' }
+  ];
+
+  const tenure_settings = {
+    max_carry_over_days: 5.0,
+    allow_part_time: false,
+    fiscal_year_start_month: 1
+  };
+
   return {
     departments,
     leave_types,
@@ -415,7 +433,9 @@ const getInitialSeedData = () => {
     leave_attachments,
     approval_logs,
     audit_logs,
-    holidays
+    holidays,
+    tenure_rules,
+    tenure_settings
   };
 };
 
@@ -446,6 +466,19 @@ export const initStore = async () => {
   // Load from Supabase (or use fallback if disconnected)
   db = await loadStoreFromSupabase(fallbackDb);
   
+  // Ensure tenure_rules and tenure_settings exist
+  const seed = getInitialSeedData();
+  if (!db.tenure_rules) db.tenure_rules = seed.tenure_rules;
+  if (!db.tenure_settings) db.tenure_settings = seed.tenure_settings;
+  
+  // Ensure all doctors have hire_date
+  db.doctors.forEach(d => {
+    if (!d.hire_date) {
+      const match = seed.doctors.find(sd => sd.id === d.id);
+      d.hire_date = match?.hire_date || '2023-01-01';
+    }
+  });
+
   // Save the merged/fetched data back to local store
   fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2), 'utf-8');
 };
