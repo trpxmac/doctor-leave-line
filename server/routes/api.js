@@ -31,17 +31,46 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const UPLOADS_DIR = path.join(__dirname, '..', '..', 'uploads');
 
-// Multer storage configuration
+// Whitelist allowed MIME types and file extensions (Security Hardening)
+const ALLOWED_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp'
+]);
+
+const ALLOWED_EXTENSIONS = new Set([
+  '.pdf',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp'
+]);
+
+// Multer storage configuration with random UUID to prevent path traversal
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOADS_DIR),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
+    const ext = path.extname(file.originalname).toLowerCase();
     cb(null, `${Date.now()}-${uuidv4().substring(0, 8)}${ext}`);
   },
 });
+
 const upload = multer({
   storage,
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit for bandwidth optimization
+  limits: {
+    fileSize: 2 * 1024 * 1024, // 2MB limit per file
+    files: 3 // Max 3 files per upload
+  },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const mime = (file.mimetype || '').toLowerCase();
+
+    if (!ALLOWED_MIME_TYPES.has(mime) || !ALLOWED_EXTENSIONS.has(ext)) {
+      return cb(new Error('ประเภทไฟล์ไม่ได้รับอนุญาต (อนุญาตเฉพาะไฟล์ PDF, JPG, PNG, WEBP เท่านั้น)'));
+    }
+    cb(null, true);
+  }
 });
 
 // Middleware that conditionally applies multer only when Content-Type is multipart/form-data
@@ -51,6 +80,9 @@ const handleUpload = (req, res, next) => {
       if (err) {
         if (err.code === 'LIMIT_FILE_SIZE') {
           return res.status(400).json({ error: 'ขนาดไฟล์ใหญ่เกินไป (จำกัดไม่เกิน 2MB ต่อไฟล์)' });
+        }
+        if (err.code === 'LIMIT_FILE_COUNT') {
+          return res.status(400).json({ error: 'แนบไฟล์ได้สูงสุดไม่เกิน 3 ไฟล์' });
         }
         return res.status(400).json({ error: err.message });
       }
@@ -68,6 +100,14 @@ function getTodayString() {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+// Security Sanitizer: Strip HTML / Script injection tags from string inputs (XSS Protection)
+function sanitizeInput(str) {
+  if (typeof str !== 'string') return str;
+  return str
+    .replace(/<[^>]*>?/gm, '') // Strip HTML/script tags
+    .trim();
 }
 
 // Helper: Calculate duration between two dates
@@ -885,13 +925,13 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
       end_date,
       duration_days: durationDays,
       half_day_type,
-      reason,
+      reason: sanitizeInput(reason),
       is_emergency: isEmergency,
       is_exception: isException,
       upload_later: upload_later === 'true' || upload_later === true,
       substitute_doctor_id: substitute_doctor_id || null,
       substitute_doctor_name: substituteDoctorName,
-      duty_handover_notes: duty_handover_notes ? duty_handover_notes.trim() : null,
+      duty_handover_notes: duty_handover_notes ? sanitizeInput(duty_handover_notes) : null,
       has_shift_conflict: hasShiftConflict,
       status: 'PENDING',
       current_step: 1,
@@ -1047,6 +1087,7 @@ router.post('/leave-requests/:id/cancel', async (req, res) => {
     }
 
     request.status = 'CANCELLED';
+    const cleanReason = reason ? sanitizeInput(reason) : 'แพทย์ยกเลิกคำขอด้วยตนเอง';
     
     const log = {
       id: uuidv4(),
@@ -1054,7 +1095,7 @@ router.post('/leave-requests/:id/cancel', async (req, res) => {
       step_order: request.current_step,
       action: 'CANCEL',
       approver_id: doctor_id,
-      comments: reason || 'แพทย์ยกเลิกคำขอด้วยตนเอง',
+      comments: cleanReason,
       acted_at: new Date().toISOString()
     };
     db.approval_logs.push(log);
@@ -1094,6 +1135,7 @@ router.post('/leave-requests/:id/approve', async (req, res) => {
     }
 
     const { approver_id, comments = '' } = req.body;
+    const cleanComments = sanitizeInput(comments);
     const actorId = approver_id || 'c0000000-0000-0000-0000-000000000002'; // default Dr. Paravee
     const approver = db.doctors.find(d => d.id === actorId);
 
@@ -1117,7 +1159,7 @@ router.post('/leave-requests/:id/approve', async (req, res) => {
       step_order: reqItem.current_step,
       approver_id: actorId,
       action: 'APPROVED',
-      comments,
+      comments: cleanComments,
       acted_at: new Date().toISOString()
     });
 
@@ -1128,7 +1170,7 @@ router.post('/leave-requests/:id/approve', async (req, res) => {
       record_id: reqItem.id,
       action: 'UPDATE',
       actor_id: actorId,
-      new_data: { status: 'APPROVED', approver_id: actorId, comments },
+      new_data: { status: 'APPROVED', approver_id: actorId, comments: cleanComments },
       ip_address: req.ip || '127.0.0.1',
       created_at: new Date().toISOString()
     });
@@ -1145,7 +1187,7 @@ router.post('/leave-requests/:id/approve', async (req, res) => {
         leaveType,
         'APPROVED',
         approver ? `${approver.prefix_th}${approver.first_name_th} ${approver.last_name_th}` : 'หัวหน้าแผนก',
-        comments
+        cleanComments
       );
       await sendLinePushMessage(doc.line_user_id, decisionFlex);
     }
@@ -1164,6 +1206,7 @@ router.post('/leave-requests/:id/reject', async (req, res) => {
     if (!reqItem) return res.status(404).json({ error: 'Leave request not found' });
 
     const { approver_id, comments = 'ติดภารกิจออกตรวจ / ไม่ตรงเงื่อนไข' } = req.body;
+    const cleanComments = sanitizeInput(comments);
     const actorId = approver_id || 'c0000000-0000-0000-0000-000000000002';
     const approver = db.doctors.find(d => d.id === actorId);
 
@@ -1186,7 +1229,7 @@ router.post('/leave-requests/:id/reject', async (req, res) => {
       step_order: reqItem.current_step,
       approver_id: actorId,
       action: 'REJECTED',
-      comments,
+      comments: cleanComments,
       acted_at: new Date().toISOString()
     });
 
@@ -1197,7 +1240,7 @@ router.post('/leave-requests/:id/reject', async (req, res) => {
       record_id: reqItem.id,
       action: 'UPDATE',
       actor_id: actorId,
-      new_data: { status: 'REJECTED', approver_id: actorId, comments },
+      new_data: { status: 'REJECTED', approver_id: actorId, comments: cleanComments },
       ip_address: req.ip || '127.0.0.1',
       created_at: new Date().toISOString()
     });
@@ -1214,7 +1257,7 @@ router.post('/leave-requests/:id/reject', async (req, res) => {
         leaveType,
         'REJECTED',
         approver ? `${approver.prefix_th}${approver.first_name_th} ${approver.last_name_th}` : 'หัวหน้าแผนก',
-        comments
+        cleanComments
       );
       await sendLinePushMessage(doc.line_user_id, decisionFlex);
     }
