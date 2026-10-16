@@ -21,7 +21,15 @@ import {
   UserCheck,
   Clock,
   Paperclip,
-  Calendar
+  Calendar,
+  Phone,
+  Mail,
+  MapPin,
+  Smartphone,
+  UserX,
+  MessageSquare,
+  Copy,
+  Building
 } from 'lucide-react';
 
 export default function AdminMasterDataPage() {
@@ -63,6 +71,22 @@ export default function AdminMasterDataPage() {
     color: '#006699'
   });
 
+  // Doctor LINE Accounts State
+  const [doctorSearch, setDoctorSearch] = useState('');
+
+  // Medical Affairs Contact Settings State
+  const [contactSettings, setContactSettings] = useState({
+    department_name: 'ฝ่ายการแพทย์ (Medical Affairs)',
+    coordinator_name: 'คุณสิริมาศ',
+    phone_emergency: '076-361-888',
+    phone_ext: '1234',
+    phone_hotline: '081-999-8888',
+    email: 'medical_affairs@bsi.hospital',
+    location: 'อาคาร A ชั้น 3 ฝ่ายการแพทย์ โรงพยาบาลกรุงเทพศิริโรจน์',
+    notify_line: true
+  });
+  const [contactLoading, setContactLoading] = useState(false);
+
   // Toast
   const [toastMessage, setToastMessage] = useState({ type: '', text: '' });
   const showToast = (text, type = 'success') => {
@@ -73,17 +97,19 @@ export default function AdminMasterDataPage() {
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      const [docRes, deptRes, routeRes, typeRes] = await Promise.all([
+      const [docRes, deptRes, routeRes, typeRes, contactRes] = await Promise.all([
         fetch('/api/doctors'),
         fetch('/api/departments'),
         fetch('/api/approval-routes'),
-        fetch('/api/leave-types?includeAll=true')
+        fetch('/api/leave-types?includeAll=true'),
+        fetch('/api/settings/contact')
       ]);
 
       if (docRes.ok) setDoctors(await docRes.json());
       if (deptRes.ok) setDepartments(await deptRes.json());
       if (routeRes.ok) setRoutes(await routeRes.json());
       if (typeRes.ok) setLeaveTypes(await typeRes.json());
+      if (contactRes.ok) setContactSettings(await contactRes.json());
     } catch (err) {
       console.error(err);
       showToast('เกิดข้อผิดพลาดในการโหลดข้อมูล', 'error');
@@ -95,6 +121,45 @@ export default function AdminMasterDataPage() {
   useEffect(() => {
     fetchInitialData();
   }, []);
+
+  // Save Medical Affairs Contact Settings
+  const handleSaveContact = async (e) => {
+    e.preventDefault();
+    setContactLoading(true);
+    try {
+      const res = await fetch('/api/settings/contact', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contactSettings)
+      });
+      if (res.ok) {
+        showToast('บันทึกข้อมูลติดต่อฝ่ายการแพทย์เรียบร้อย');
+      } else {
+        showToast('เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
+      }
+    } catch {
+      showToast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+    } finally {
+      setContactLoading(false);
+    }
+  };
+
+  // Unlink Doctor LINE Account
+  const handleUnlinkDoctorLine = async (docId, docName) => {
+    if (!window.confirm(`ท่านต้องการยกเลิกการผูกบัญชี LINE ของ ${docName} ใช่หรือไม่?`)) return;
+    try {
+      const res = await fetch(`/api/doctors/${docId}/unlink-line`, { method: 'POST' });
+      if (res.ok) {
+        showToast(`ยกเลิกการผูก LINE ของ ${docName} เรียบร้อย`);
+        const docRes = await fetch('/api/doctors');
+        if (docRes.ok) setDoctors(await docRes.json());
+      } else {
+        showToast('เกิดข้อผิดพลาดในการยกเลิก', 'error');
+      }
+    } catch {
+      showToast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+    }
+  };
 
   // --- Handlers: Approval Routes ---
   const handleOpenAddRoute = () => {
@@ -335,10 +400,10 @@ export default function AdminMasterDataPage() {
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold">
+        <div className="flex flex-wrap rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold gap-1">
           <button
             onClick={() => setActiveTab('APPROVAL_ROUTES')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
               activeTab === 'APPROVAL_ROUTES'
                 ? 'bg-white text-[#006699] shadow-2xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -350,7 +415,7 @@ export default function AdminMasterDataPage() {
 
           <button
             onClick={() => setActiveTab('LEAVE_TYPES')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
               activeTab === 'LEAVE_TYPES'
                 ? 'bg-white text-[#006699] shadow-2xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -358,6 +423,30 @@ export default function AdminMasterDataPage() {
           >
             <FileText className="w-3.5 h-3.5" />
             <span>ประเภทการลา ({leaveTypes.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('DOCTORS_LINE')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+              activeTab === 'DOCTORS_LINE'
+                ? 'bg-white text-[#006699] shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>แพทย์ & บัญชี LINE ({doctors.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('CONTACT_INFO')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+              activeTab === 'CONTACT_INFO'
+                ? 'bg-white text-[#006699] shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Phone className="w-3.5 h-3.5" />
+            <span>ข้อมูลติดต่อฝ่ายการแพทย์</span>
           </button>
         </div>
       </div>
@@ -609,6 +698,372 @@ export default function AdminMasterDataPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 3: DOCTORS & LINE ACCOUNTS                            */}
+      {/* ========================================================= */}
+      {activeTab === 'DOCTORS_LINE' && (
+        <div className="space-y-4 animate-in fade-in duration-150">
+          
+          {/* Action Row & Summary */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="relative w-full sm:w-80">
+              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+              <input
+                type="text"
+                value={doctorSearch}
+                onChange={(e) => setDoctorSearch(e.target.value)}
+                placeholder="ค้นหาแพทย์, แผนก, รหัสพนักงาน..."
+                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-[#006699]"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 text-xs">
+              <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200 font-semibold">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>ผูก LINE แล้ว: {doctors.filter(d => d.line_user_id).length} ท่าน</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-slate-600 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200 font-semibold">
+                <span>ยังไม่ผูก: {doctors.filter(d => !d.line_user_id).length} ท่าน</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Doctors Table */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
+                    <th className="py-3 px-4">แพทย์ / รหัส</th>
+                    <th className="py-3 px-4">แผนก</th>
+                    <th className="py-3 px-4">ประเภทแพทย์</th>
+                    <th className="py-3 px-4">สถานะ LINE Official</th>
+                    <th className="py-3 px-4">เบอร์โทรศัพท์</th>
+                    <th className="py-3 px-4 text-right">จัดการ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {doctors
+                    .filter(d => {
+                      if (!doctorSearch.trim()) return true;
+                      const q = doctorSearch.toLowerCase();
+                      const name = `${d.prefix_th || ''}${d.first_name_th || ''} ${d.last_name_th || ''}`.toLowerCase();
+                      const emp = (d.employee_id || '').toLowerCase();
+                      const dept = (d.department_name || '').toLowerCase();
+                      return name.includes(q) || emp.includes(q) || dept.includes(q);
+                    })
+                    .map(doc => {
+                      const isLinked = Boolean(doc.line_user_id);
+                      return (
+                        <tr key={doc.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2.5">
+                              <img
+                                src={doc.avatar || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=100'}
+                                alt=""
+                                className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0"
+                              />
+                              <div>
+                                <span className="font-bold text-slate-800 block text-xs">
+                                  {doc.prefix_th}{doc.first_name_th} {doc.last_name_th}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  {doc.employee_id}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 font-medium">
+                            {doc.department_name || 'ไม่ระบุ'}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              doc.doctor_type === 'FULL_TIME'
+                                ? 'bg-sky-50 text-[#006699] border border-sky-200'
+                                : 'bg-purple-50 text-purple-700 border border-purple-200'
+                            }`}>
+                              {doc.doctor_type === 'FULL_TIME' ? 'ประจำ (FT)' : 'Part-Time (PT)'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            {isLinked ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  <span>ผูกแล้ว</span>
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-mono truncate max-w-[120px]" title={doc.line_user_id}>
+                                  {doc.line_display_name || doc.line_user_id.slice(0, 10) + '...'}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 border border-slate-200">
+                                <Clock className="w-3 h-3 text-slate-400" />
+                                <span>ยังไม่ผูก LINE</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 font-mono text-[11px]">
+                            {doc.phone || '-'}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            {isLinked ? (
+                              <button
+                                onClick={() => handleUnlinkDoctorLine(doc.id, `${doc.prefix_th}${doc.first_name_th}`)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 text-[11px] font-semibold transition-colors"
+                                title="ยกเลิกการผูกเพื่ออนุญาตให้แพทย์ผูก LINE ใหม่ได้"
+                              >
+                                <UserX className="w-3 h-3" />
+                                <span>ปลดการผูก</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(window.location.origin);
+                                  showToast('คัดลอกลิงก์หน้าลงทะเบียนเข้าใช้งานให้แพทย์แล้ว');
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 text-[11px] font-medium transition-colors"
+                              >
+                                <Copy className="w-3 h-3" />
+                                <span>คัดลอกลิงก์</span>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 4: MEDICAL AFFAIRS CONTACT SETTINGS                   */}
+      {/* ========================================================= */}
+      {activeTab === 'CONTACT_INFO' && (
+        <div className="space-y-6 animate-in fade-in duration-150">
+          
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Form Column */}
+            <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-5">
+              <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100">
+                <div className="w-8 h-8 rounded-xl bg-sky-100 text-[#006699] flex items-center justify-center">
+                  <Phone className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">
+                    ตั้งค่าข้อมูลติดต่อฝ่ายการแพทย์ & แจ้งเหตุฉุกเฉิน
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    ข้อมูลนี้จะถูกนำไปแสดงบนปุ่มโทรออก One-Tap Call ในหน้ายื่นใบลา และข้อความแจ้งเตือนอัตโนมัติใน LINE
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveContact} className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      ชื่อหน่วยงาน / ฝ่าย <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={contactSettings.department_name}
+                      onChange={(e) => setContactSettings({ ...contactSettings, department_name: e.target.value })}
+                      placeholder="เช่น ฝ่ายการแพทย์ (Medical Affairs)"
+                      className="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-[#006699]"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      ชื่อผู้ประสานงานหลัก (ที่จะแสดงให้แพทย์เห็น) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={contactSettings.coordinator_name}
+                      onChange={(e) => setContactSettings({ ...contactSettings, coordinator_name: e.target.value })}
+                      placeholder="เช่น คุณสิริมาศ หรือ เจ้าหน้าที่ฝ่ายการแพทย์"
+                      className="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-[#006699]"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="block font-bold text-slate-700 mb-1">
+                      เบอร์โทรศัพท์ฉุกเฉิน (เบอร์หลักของโรงพยาบาล) <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type="text"
+                        value={contactSettings.phone_emergency}
+                        onChange={(e) => setContactSettings({ ...contactSettings, phone_emergency: e.target.value })}
+                        placeholder="076-361-888"
+                        className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800 focus:ring-2 focus:ring-[#006699]"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      เบอร์ต่อ (Extension)
+                    </label>
+                    <input
+                      type="text"
+                      value={contactSettings.phone_ext}
+                      onChange={(e) => setContactSettings({ ...contactSettings, phone_ext: e.target.value })}
+                      placeholder="เช่น 1234"
+                      className="w-full p-2.5 rounded-xl border border-slate-300 font-mono focus:ring-2 focus:ring-[#006699]"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      เบอร์มือถือสายตรง (Hotline 24 ชม.)
+                    </label>
+                    <div className="relative">
+                      <Smartphone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type="text"
+                        value={contactSettings.phone_hotline}
+                        onChange={(e) => setContactSettings({ ...contactSettings, phone_hotline: e.target.value })}
+                        placeholder="081-999-8888"
+                        className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 font-mono focus:ring-2 focus:ring-[#006699]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      อีเมลติดต่อฝ่ายการแพทย์
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type="email"
+                        value={contactSettings.email}
+                        onChange={(e) => setContactSettings({ ...contactSettings, email: e.target.value })}
+                        placeholder="medical_affairs@bsi.hospital"
+                        className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-[#006699]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    สถานที่ติดต่อภายในโรงพยาบาล
+                  </label>
+                  <div className="relative">
+                    <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      value={contactSettings.location}
+                      onChange={(e) => setContactSettings({ ...contactSettings, location: e.target.value })}
+                      placeholder="เช่น อาคาร A ชั้น 3 ฝ่ายการแพทย์ โรงพยาบาลกรุงเทพศิริโรจน์"
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-[#006699]"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3 bg-sky-50 rounded-xl border border-sky-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-[#006699]" />
+                    <span className="font-semibold text-slate-700">ส่ง Push Alert ด่วนเข้า LINE แอดมินทันทีที่มีการลาฉุกเฉิน</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={contactSettings.notify_line}
+                    onChange={(e) => setContactSettings({ ...contactSettings, notify_line: e.target.checked })}
+                    className="w-4 h-4 rounded text-[#006699]"
+                  />
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={contactLoading}
+                    className="px-5 py-2.5 rounded-xl bg-[#006699] hover:bg-[#005580] text-white font-bold shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {contactLoading ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>กำลังบันทึก...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>บันทึกข้อมูลติดต่อ</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Live Preview Box */}
+            <div className="bg-slate-50/70 p-5 rounded-2xl border border-slate-200 space-y-4">
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                <span>ตัวอย่างการแสดงผลบนหน้าจอแพทย์ (Live Preview)</span>
+              </h4>
+
+              {/* Simulation of Emergency banner */}
+              <div className="bg-white rounded-2xl border border-rose-200 p-4 shadow-sm space-y-3">
+                <div className="text-[10px] uppercase font-bold text-rose-600 tracking-wider">
+                  กล่องแจ้งเตือนลาฉุกเฉิน (Same-day Leave)
+                </div>
+                <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 space-y-2">
+                  <p className="text-[11px] text-rose-800 leading-snug">
+                    กรุณาโทรแจ้งฝ่ายการแพทย์ ({contactSettings.coordinator_name || 'เจ้าหน้าที่'}) โดยตรงทันที เพื่อประสานงานปิดตารางออกตรวจ
+                  </p>
+                  <div className="py-2 px-3 bg-rose-600 text-white rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 shadow-xs">
+                    <Phone className="w-3.5 h-3.5" />
+                    <span>โทรแจ้งฝ่ายการแพทย์ ({contactSettings.phone_emergency || '076-361-888'}{contactSettings.phone_ext ? ` ต่อ ${contactSettings.phone_ext}` : ''})</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Card Preview */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-2 text-xs">
+                <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                  นามบัตรหน่วยงาน
+                </div>
+                <div className="font-bold text-slate-800 text-sm">
+                  {contactSettings.department_name || 'ฝ่ายการแพทย์'}
+                </div>
+                <div className="text-slate-500 text-[11px] space-y-1">
+                  <div>ผู้ประสานงาน: <strong className="text-slate-700">{contactSettings.coordinator_name || '-'}</strong></div>
+                  <div>เบอร์โทรศัพท์: <strong className="text-slate-700">{contactSettings.phone_emergency || '-'} {contactSettings.phone_ext ? `(ต่อ ${contactSettings.phone_ext})` : ''}</strong></div>
+                  {contactSettings.phone_hotline && (
+                    <div>สายด่วน: <strong className="text-slate-700">{contactSettings.phone_hotline}</strong></div>
+                  )}
+                  {contactSettings.email && (
+                    <div>อีเมล: <strong className="text-slate-700">{contactSettings.email}</strong></div>
+                  )}
+                  {contactSettings.location && (
+                    <div>สถานที่: <span className="text-slate-600">{contactSettings.location}</span></div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
         </div>
       )}
 

@@ -182,7 +182,7 @@ export default function Navbar() {
                   }`}
                 >
                   <LayoutDashboard className={`w-4 h-4 shrink-0 ${location.pathname === '/admin' ? 'text-[#006699]' : 'text-slate-400'}`} />
-                  <span className="whitespace-nowrap">ฝ่ายการแพทย์ (พี่กุ้ง)</span>
+                  <span className="whitespace-nowrap">ฝ่ายการแพทย์</span>
                 </Link>
               )}
 
@@ -346,7 +346,7 @@ export default function Navbar() {
                   className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
                 >
                   <LayoutDashboard className="w-4 h-4 text-[#006699]" />
-                  <span>ฝ่ายการแพทย์ (พี่กุ้ง)</span>
+                  <span>ฝ่ายการแพทย์</span>
                 </Link>
 
                 <div className="pt-2 pb-1 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">

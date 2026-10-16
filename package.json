@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "server": "node server/index.js",
+    "server": "node --watch server/index.js",
     "start": "node server/index.js",
     "postinstall": "npm run build",
     "dev:all": "concurrently -k -n \"SERVER,CLIENT\" -c \"cyan,magenta\" \"npm run server\" \"npm run dev\""

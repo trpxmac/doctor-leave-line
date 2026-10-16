@@ -193,7 +193,7 @@ const getInitialSeedData = () => {
       employee_id: 'EMP-KOONG',
       line_user_id: 'U_KOONG_LINE_ADMIN',
       prefix_th: 'คุณ',
-      first_name_th: 'สิริมาศ (พี่กุ้ง)',
+      first_name_th: 'สิริมาศ',
       last_name_th: 'ฝ่ายการแพทย์',
       doctor_type: 'FULL_TIME',
       department_id: 'd1111111-1111-1111-1111-111111111111',
@@ -422,6 +422,17 @@ const getInitialSeedData = () => {
     fiscal_year_start_month: 1
   };
 
+  const contact_settings = {
+    department_name: 'ฝ่ายการแพทย์ (Medical Affairs)',
+    coordinator_name: 'คุณสิริมาศ',
+    phone_emergency: '076-361-888',
+    phone_ext: '1234',
+    phone_hotline: '081-999-8888',
+    email: 'medical_affairs@bsi.hospital',
+    location: 'อาคาร A ชั้น 3 ฝ่ายการแพทย์ โรงพยาบาลกรุงเทพศิริโรจน์',
+    notify_line: true
+  };
+
   const getOffsetDate = (offsetDays) => {
     const d = new Date(Date.now() + offsetDays * 86400000);
     return d.toISOString().split('T')[0];
@@ -516,6 +527,7 @@ const getInitialSeedData = () => {
     holidays,
     tenure_rules,
     tenure_settings,
+    contact_settings,
     doctor_shifts
   };
 };
@@ -547,10 +559,11 @@ export const initStore = async () => {
   // Load from Supabase (or use fallback if disconnected)
   db = await loadStoreFromSupabase(fallbackDb);
   
-  // Ensure tenure_rules and tenure_settings exist
+  // Ensure tenure_rules, tenure_settings, contact_settings exist
   const seed = getInitialSeedData();
   if (!db.tenure_rules) db.tenure_rules = seed.tenure_rules;
   if (!db.tenure_settings) db.tenure_settings = seed.tenure_settings;
+  if (!db.contact_settings) db.contact_settings = seed.contact_settings;
   if (!db.doctor_shifts) db.doctor_shifts = seed.doctor_shifts;
   
   // Ensure all doctors have hire_date

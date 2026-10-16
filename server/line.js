@@ -197,7 +197,7 @@ export function buildDoctorSubmittedFlex(request, doctor, leaveType) {
             contents: [
               {
                 type: 'text',
-                text: '🚨 ลาฉุกเฉินวันเดียวกัน: กรุณาโทรแจ้งพี่กุ้งทันที',
+                text: '🚨 ลาฉุกเฉินวันเดียวกัน: กรุณาโทรแจ้งฝ่ายการแพทย์ทันที',
                 size: 'xs',
                 color: '#dc2626',
                 weight: 'bold',
@@ -807,7 +807,7 @@ export function buildWelcomeFlex(doctorName = '') {
               },
               {
                 type: 'text',
-                text: '• ติดต่อฝ่ายการแพทย์ (พี่กุ้ง) ฉุกเฉิน: 076-361-888',
+                text: '• ติดต่อฝ่ายการแพทย์ ฉุกเฉิน: 076-361-888',
                 size: 'xs',
                 color: '#64748b'
               }

@@ -142,26 +142,120 @@ router.get('/auth/me', (req, res) => {
   res.json({ doctor: doctor || null });
 });
 
-router.post('/auth/link', (req, res) => {
+// Search doctors by name or phone or employeeId for Onboarding
+router.get('/auth/search-doctors', (req, res) => {
   const db = getDb();
-  const { lineUserId, employeeId } = req.body;
-  if (!lineUserId || !employeeId) {
-    return res.status(400).json({ error: 'lineUserId and employeeId are required' });
+  const query = (req.query.query || '').trim().toLowerCase();
+  
+  const cleanQuery = query.replace(/[^0-9]/g, '');
+
+  let filtered = db.doctors;
+  if (query) {
+    filtered = db.doctors.filter(d => {
+      const fullName = `${d.prefix_th || ''}${d.first_name_th || ''} ${d.last_name_th || ''}`.toLowerCase();
+      const empId = (d.employee_id || '').toLowerCase();
+      const phone = (d.phone || '').replace(/[^0-9]/g, '');
+
+      return (
+        fullName.includes(query) ||
+        empId.includes(query) ||
+        (cleanQuery.length >= 3 && phone.includes(cleanQuery))
+      );
+    });
   }
 
-  const doctor = db.doctors.find(d => d.employee_id === employeeId);
+  const results = filtered.map(d => {
+    const dept = db.departments.find(dept => dept.id === d.department_id);
+    return {
+      id: d.id,
+      employee_id: d.employee_id,
+      prefix_th: d.prefix_th,
+      first_name_th: d.first_name_th,
+      last_name_th: d.last_name_th,
+      doctor_type: d.doctor_type,
+      department_name: dept?.name_th || 'ไม่ระบุแผนก',
+      phone: d.phone,
+      phone_masked: d.phone ? d.phone.replace(/(\d{3})\d{3}(\d{4})/, '$1-xxx-$2') : '-',
+      is_linked: !!d.line_user_id,
+      line_user_id: d.line_user_id,
+      line_display_name: d.line_display_name,
+      avatar: d.avatar
+    };
+  });
+
+  res.json({ doctors: results });
+});
+
+router.post('/auth/link', (req, res) => {
+  const db = getDb();
+  const { lineUserId, doctorId, employeeId, lineDisplayName, linePictureUrl } = req.body;
+  if (!lineUserId) {
+    return res.status(400).json({ error: 'lineUserId is required' });
+  }
+
+  let doctor = null;
+  if (doctorId) {
+    doctor = db.doctors.find(d => d.id === doctorId);
+  } else if (employeeId) {
+    doctor = db.doctors.find(d => d.employee_id === employeeId);
+  }
+
   if (!doctor) {
-    return res.status(404).json({ error: 'ไม่พบรหัสพนักงานนี้ในระบบ' });
+    return res.status(404).json({ error: 'ไม่พบข้อมูลแพทย์ในระบบ' });
   }
 
   if (doctor.line_user_id && doctor.line_user_id !== lineUserId) {
-    return res.status(400).json({ error: 'รหัสพนักงานนี้ผูกกับบัญชี LINE อื่นแล้ว' });
+    return res.status(400).json({ error: 'บัญชีแพทย์ท่านนี้ได้ผูกกับ LINE อื่นไปแล้ว หากต้องการเปลี่ยนกรุณาติดต่อฝ่ายการแพทย์' });
   }
 
   doctor.line_user_id = lineUserId;
+  if (lineDisplayName) doctor.line_display_name = lineDisplayName;
+  if (linePictureUrl && !doctor.avatar) doctor.avatar = linePictureUrl;
+  
   saveStore();
 
+  if (db.audit_logs) {
+    db.audit_logs.push({
+      id: uuidv4(),
+      table_name: 'doctors',
+      record_id: doctor.id,
+      action: 'UPDATE',
+      actor_id: doctor.id,
+      new_data: { line_user_id: lineUserId, line_display_name: lineDisplayName },
+      ip_address: req.ip || '127.0.0.1',
+      created_at: new Date().toISOString()
+    });
+  }
+
   res.json({ success: true, doctor });
+});
+
+// Admin unlink doctor LINE
+router.post('/doctors/:id/unlink-line', (req, res) => {
+  const db = getDb();
+  const doctor = db.doctors.find(d => d.id === req.params.id);
+  if (!doctor) return res.status(404).json({ error: 'ไม่พบแพทย์' });
+
+  const prevLineId = doctor.line_user_id;
+  doctor.line_user_id = null;
+  doctor.line_display_name = null;
+  saveStore();
+
+  if (db.audit_logs) {
+    db.audit_logs.push({
+      id: uuidv4(),
+      table_name: 'doctors',
+      record_id: doctor.id,
+      action: 'UPDATE',
+      actor_id: req.body.actor_id || null,
+      old_data: { line_user_id: prevLineId },
+      new_data: { line_user_id: null },
+      ip_address: req.ip || '127.0.0.1',
+      created_at: new Date().toISOString()
+    });
+  }
+
+  res.json({ success: true, message: 'ยกเลิกการผูกบัญชี LINE เรียบร้อย' });
 });
 
 // -------------------------------------------------------------
@@ -1798,6 +1892,54 @@ router.put('/tenure/rules', (req, res) => {
 
   saveStore();
   res.json({ message: 'บันทึกเกณฑ์การคำนวณอายุงานสำเร็จ', rules: db.tenure_rules, settings: db.tenure_settings });
+});
+
+// GET /api/settings/contact - Get Medical Affairs contact settings
+router.get('/settings/contact', (req, res) => {
+  const db = getDb();
+  const defaultContact = {
+    department_name: 'ฝ่ายการแพทย์ (Medical Affairs)',
+    coordinator_name: 'คุณสิริมาศ',
+    phone_emergency: '076-361-888',
+    phone_ext: '1234',
+    phone_hotline: '081-999-8888',
+    email: 'medical_affairs@bsi.hospital',
+    location: 'อาคาร A ชั้น 3 ฝ่ายการแพทย์ โรงพยาบาลกรุงเทพศิริโรจน์',
+    notify_line: true
+  };
+  res.json(db.contact_settings || defaultContact);
+});
+
+// PUT /api/settings/contact - Update Medical Affairs contact settings
+router.put('/settings/contact', (req, res) => {
+  const db = getDb();
+  const { department_name, coordinator_name, phone_emergency, phone_ext, phone_hotline, email, location, notify_line, actor_id } = req.body;
+
+  db.contact_settings = {
+    ...db.contact_settings,
+    department_name: department_name || db.contact_settings?.department_name || 'ฝ่ายการแพทย์ (Medical Affairs)',
+    coordinator_name: coordinator_name || db.contact_settings?.coordinator_name || 'คุณสิริมาศ',
+    phone_emergency: phone_emergency || db.contact_settings?.phone_emergency || '076-361-888',
+    phone_ext: phone_ext !== undefined ? phone_ext : (db.contact_settings?.phone_ext || ''),
+    phone_hotline: phone_hotline !== undefined ? phone_hotline : (db.contact_settings?.phone_hotline || ''),
+    email: email !== undefined ? email : (db.contact_settings?.email || ''),
+    location: location !== undefined ? location : (db.contact_settings?.location || ''),
+    notify_line: notify_line !== undefined ? notify_line : true
+  };
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'contact_settings',
+    record_id: 'settings',
+    action: 'UPDATE',
+    actor_id: actor_id || null,
+    new_data: db.contact_settings,
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.json({ message: 'บันทึกข้อมูลติดต่อฝ่ายการแพทย์สำเร็จ', settings: db.contact_settings });
 });
 
 // PUT /api/doctors/:id/hire-date - Update doctor's hire date

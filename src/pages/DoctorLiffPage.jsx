@@ -23,6 +23,21 @@ export default function DoctorLiffPage() {
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [balances, setBalances] = useState([]);
   const [selectedType, setSelectedType] = useState(null);
+  const [contactSettings, setContactSettings] = useState({
+    department_name: 'ฝ่ายการแพทย์ (Medical Affairs)',
+    coordinator_name: 'คุณสิริมาศ',
+    phone_emergency: '076-361-888',
+    phone_ext: '1234'
+  });
+
+  useEffect(() => {
+    fetch('/api/settings/contact')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.phone_emergency) setContactSettings(data);
+      })
+      .catch(() => {});
+  }, []);
 
   // Form State
   const todayStr = new Date().toISOString().split('T')[0];
@@ -344,18 +359,18 @@ export default function DoctorLiffPage() {
                   แจ้งเตือน: ท่านกำลังยื่นลาในวันปฏิบัติงาน (Same-Day Leave)
                 </h4>
                 <p className="text-[11px] text-rose-700 mt-0.5 leading-snug">
-                  กรุณาโทรแจ้งฝ่ายการแพทย์ (พี่กุ้ง) โดยตรงทันที เพื่อประสานงานปิดตารางออกตรวจหรือหาแพทย์ทดแทน
+                  กรุณาโทรแจ้งฝ่ายการแพทย์ ({contactSettings.coordinator_name || 'เจ้าหน้าที่ฝ่ายการแพทย์'}) โดยตรงทันที เพื่อประสานงานปิดตารางออกตรวจหรือหาแพทย์ทดแทน
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2 mt-1">
               <a
-                href="tel:076361888"
+                href={`tel:${(contactSettings.phone_emergency || '076361888').replace(/[^0-9]/g, '')}`}
                 className="flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
               >
                 <Phone className="w-3.5 h-3.5" />
-                <span>โทรหาพี่กุ้ง (076-361-888)</span>
+                <span>โทรแจ้งฝ่ายการแพทย์ ({contactSettings.phone_emergency}{contactSettings.phone_ext ? ` ต่อ ${contactSettings.phone_ext}` : ''})</span>
               </a>
               <div className="text-[10px] text-rose-600 font-semibold px-2 py-1 bg-white rounded border border-rose-200">
                 ระบบจะส่ง Push Alert ด่วน
@@ -579,7 +594,7 @@ export default function DoctorLiffPage() {
           {/* Exception Warning if Quota Full */}
           {quotaInfo?.status === 'FULL' && (
             <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800">
-              💡 <strong>คำขอข้อยกเว้นพิเศษ:</strong> โควตาวันนี้เต็มแล้ว หากท่านจำเป็นต้องลาจริง ๆ สามารถส่งคำขอได้ ระบบจะส่งเตือนพี่กุ้งและหัวหน้าแผนกเป็นกรณีเร่งด่วนพิเศษ
+              💡 <strong>คำขอข้อยกเว้นพิเศษ:</strong> โควตาวันนี้เต็มแล้ว หากท่านจำเป็นต้องลาจริง ๆ สามารถส่งคำขอได้ ระบบจะส่งเตือนฝ่ายการแพทย์และหัวหน้าแผนกเป็นกรณีเร่งด่วนพิเศษ
             </div>
           )}
 

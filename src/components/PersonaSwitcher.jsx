@@ -24,7 +24,7 @@ export default function PersonaSwitcher() {
           let roleColor = 'bg-slate-700 text-slate-200';
 
           if (doc.roles.includes('MEDICAL_ADMIN')) {
-            roleBadge = 'พี่กุ้ง (Admin)';
+            roleBadge = 'ฝ่ายการแพทย์ (Admin)';
             roleColor = 'bg-amber-500 text-white font-bold';
           } else if (doc.roles.includes('DEPT_HEAD')) {
             roleBadge = 'หัวหน้าแผนก (Approver)';
