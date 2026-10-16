@@ -413,107 +413,117 @@ export default function AdminTenurePage() {
 
       {/* Rules Setting Modal */}
       {rulesModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="bg-slate-50 px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="bg-slate-50 px-5 py-3.5 border-b border-slate-200 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-[#006699]" />
                 <h2 className="text-sm font-bold text-slate-800">
                   ตั้งค่าเกณฑ์การคำนวณวันลาพักร้อนตามอายุงาน (Tenure Policy)
                 </h2>
               </div>
-              <button onClick={() => setRulesModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button 
+                type="button"
+                onClick={() => setRulesModalOpen(false)} 
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 transition-colors"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveRules} className="p-5 space-y-4 text-xs">
-              <div className="space-y-3">
-                <div className="font-bold text-slate-700">เกณฑ์แบ่งตามช่วงอายุงาน:</div>
-                <div className="space-y-2">
-                  {rules.map((rule, idx) => (
-                    <div key={rule.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-                      <div className="flex-1">
-                        <span className="font-bold text-slate-800 block text-xs">
-                          {rule.min_years} - {rule.max_years === 99 ? 'ขึ้นไป' : `${rule.max_years} ปี`}
-                        </span>
-                        <input
-                          type="text"
-                          value={rule.description}
-                          onChange={(e) => {
-                            const updated = [...rules];
-                            updated[idx].description = e.target.value;
-                            setRules(updated);
-                          }}
-                          className="w-full mt-1 text-[11px] p-1.5 border border-slate-200 rounded-lg bg-white"
-                        />
+            {/* Form wrapping content + sticky footer */}
+            <form onSubmit={handleSaveRules} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              {/* Scrollable Content Body */}
+              <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+                <div className="space-y-3">
+                  <div className="font-bold text-slate-700">เกณฑ์แบ่งตามช่วงอายุงาน:</div>
+                  <div className="space-y-2">
+                    {rules.map((rule, idx) => (
+                      <div key={rule.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div className="flex-1 w-full sm:w-auto">
+                          <span className="font-bold text-slate-800 block text-xs">
+                            {rule.min_years} - {rule.max_years === 99 ? 'ขึ้นไป' : `${rule.max_years} ปี`}
+                          </span>
+                          <input
+                            type="text"
+                            value={rule.description}
+                            onChange={(e) => {
+                              const updated = [...rules];
+                              updated[idx].description = e.target.value;
+                              setRules(updated);
+                            }}
+                            className="w-full mt-1 text-[11px] p-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#006699]"
+                          />
+                        </div>
+                        <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto">
+                          <span className="text-[11px] text-slate-500">สิทธิ์วันลา:</span>
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            max="60"
+                            value={rule.entitlement_days}
+                            onChange={(e) => {
+                              const updated = [...rules];
+                              updated[idx].entitlement_days = parseFloat(e.target.value) || 0;
+                              setRules(updated);
+                            }}
+                            className="w-16 p-1.5 border border-slate-300 rounded-lg text-center font-bold text-[#006699] focus:outline-none focus:ring-1 focus:ring-[#006699]"
+                          />
+                          <span className="text-slate-500">วัน</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-[11px] text-slate-500">สิทธิ์วันลา:</span>
-                        <input
-                          type="number"
-                          step="0.5"
-                          min="0"
-                          max="60"
-                          value={rule.entitlement_days}
-                          onChange={(e) => {
-                            const updated = [...rules];
-                            updated[idx].entitlement_days = parseFloat(e.target.value) || 0;
-                            setRules(updated);
-                          }}
-                          className="w-16 p-1.5 border border-slate-300 rounded-lg text-center font-bold text-[#006699]"
-                        />
-                        <span className="text-slate-500">วัน</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* General Policy Settings */}
-              <div className="p-3 bg-sky-50/50 rounded-xl border border-sky-100 space-y-3">
-                <div className="font-bold text-[#006699]">นโยบายการยกยอดข้ามปี (Roll-over Policy):</div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-700">ยกยอดวันลาพักร้อนที่เหลือไปปีถัดไปได้สูงสุด:</span>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      max="30"
-                      value={settings.max_carry_over_days}
-                      onChange={(e) => setSettings({ ...settings, max_carry_over_days: parseFloat(e.target.value) || 0 })}
-                      className="w-16 p-1.5 border border-slate-300 rounded-lg text-center font-bold text-slate-800 bg-white"
-                    />
-                    <span className="text-slate-600">วัน</span>
+                    ))}
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-sky-100">
-                  <span className="text-slate-700">ให้สิทธิ์วันลาพักผ่อนกับแพทย์ Part-Time หรือไม่:</span>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={settings.allow_part_time}
-                      onChange={(e) => setSettings({ ...settings, allow_part_time: e.target.checked })}
-                      className="w-4 h-4 rounded text-[#006699]"
-                    />
-                    <span className="font-semibold text-slate-700">อนุญาตให้มีสิทธิ์</span>
-                  </label>
+                {/* General Policy Settings */}
+                <div className="p-3.5 bg-sky-50/50 rounded-xl border border-sky-100 space-y-3">
+                  <div className="font-bold text-[#006699]">นโยบายการยกยอดข้ามปี (Roll-over Policy):</div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span className="text-slate-700">ยกยอดวันลาพักร้อนที่เหลือไปปีถัดไปได้สูงสุด:</span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        max="30"
+                        value={settings.max_carry_over_days}
+                        onChange={(e) => setSettings({ ...settings, max_carry_over_days: parseFloat(e.target.value) || 0 })}
+                        className="w-16 p-1.5 border border-slate-300 rounded-lg text-center font-bold text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-[#006699]"
+                      />
+                      <span className="text-slate-600">วัน</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-2 border-t border-sky-100 gap-2">
+                    <span className="text-slate-700">ให้สิทธิ์วันลาพักผ่อนกับแพทย์ Part-Time หรือไม่:</span>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.allow_part_time}
+                        onChange={(e) => setSettings({ ...settings, allow_part_time: e.target.checked })}
+                        className="w-4 h-4 rounded text-[#006699]"
+                      />
+                      <span className="font-semibold text-slate-700">อนุญาตให้มีสิทธิ์</span>
+                    </label>
+                  </div>
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+              {/* Fixed Bottom Action Bar */}
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setRulesModalOpen(false)}
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-medium transition-colors"
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-[#006699] text-white font-bold"
+                  className="px-5 py-2 rounded-xl bg-[#006699] hover:bg-[#005580] text-white font-bold shadow-sm transition-colors"
                 >
                   บันทึกการตั้งค่าเกณฑ์
                 </button>
@@ -525,15 +535,15 @@ export default function AdminTenurePage() {
 
       {/* Batch Apply Modal */}
       {applyModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="bg-amber-50 px-5 py-4 border-b border-amber-200 flex items-center gap-2">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="bg-amber-50 px-5 py-4 border-b border-amber-200 flex items-center gap-2 shrink-0">
               <Sparkles className="w-5 h-5 text-amber-600" />
               <h2 className="text-sm font-bold text-amber-900">
                 ยืนยันการประมวลผลสิทธิ์วันลาทั้ง รพ. ปี {selectedYear}
               </h2>
             </div>
-            <div className="p-5 space-y-4 text-xs">
+            <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <p className="text-slate-600 leading-relaxed">
                 ระบบจะทำการประมวลผลโควตาวันลาพักผ่อน (Vacation Leave) สำหรับปี <strong>{selectedYear}</strong> ของแพทย์ทั้ง <strong>{previewData.length} ท่าน</strong> ตามอายุงานและนโยบายที่ตั้งไว้
               </p>
@@ -555,32 +565,32 @@ export default function AdminTenurePage() {
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-[11px]">
                 ℹ️ <strong>หมายเหตุ:</strong> การดำเนินการนี้จะถูกบันทึกใน Audit Trail (PDPA Compliant) เพื่อความโปร่งใสของฝ่ายการแพทย์
               </div>
+            </div>
 
-              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setApplyModalOpen(false)}
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
-                  disabled={applying}
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmApply}
-                  disabled={applying}
-                  className="px-4 py-2 rounded-xl bg-[#006699] hover:bg-[#005580] text-white font-bold flex items-center gap-1.5 shadow-sm"
-                >
-                  {applying ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>กำลังประมวลผล...</span>
-                    </>
-                  ) : (
-                    <span>ยืนยันและปรับปรุงสิทธิ์</span>
-                  )}
-                </button>
-              </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setApplyModalOpen(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-medium transition-colors"
+                disabled={applying}
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmApply}
+                disabled={applying}
+                className="px-5 py-2 rounded-xl bg-[#006699] hover:bg-[#005580] text-white font-bold flex items-center gap-1.5 shadow-sm transition-colors"
+              >
+                {applying ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>กำลังประมวลผล...</span>
+                  </>
+                ) : (
+                  <span>ยืนยันและปรับปรุงสิทธิ์</span>
+                )}
+              </button>
             </div>
           </div>
         </div>
