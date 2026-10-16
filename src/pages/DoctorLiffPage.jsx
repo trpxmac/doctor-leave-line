@@ -13,7 +13,8 @@ import {
   Sparkles,
   ChevronRight,
   ShieldCheck,
-  FileText
+  FileText,
+  CalendarDays
 } from 'lucide-react';
 
 export default function DoctorLiffPage() {
@@ -32,8 +33,9 @@ export default function DoctorLiffPage() {
   const [uploadLater, setUploadLater] = useState(false);
   const [files, setFiles] = useState([]);
 
-  // Quota Status
+  // Quota Status & Duration Preview
   const [quotaInfo, setQuotaInfo] = useState(null);
+  const [durationPreview, setDurationPreview] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [successResult, setSuccessResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
@@ -95,6 +97,34 @@ export default function DoctorLiffPage() {
     };
     checkQuota();
   }, [currentDoctor, startDate]);
+
+  // Live Calculate Duration (with Working Days & Holidays check)
+  useEffect(() => {
+    if (!startDate || !selectedType) return;
+    const finalEnd = halfDayType !== 'FULL_DAY' ? startDate : (endDate || startDate);
+
+    const calc = async () => {
+      try {
+        const res = await fetch('/api/calculate-duration', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            start_date: startDate,
+            end_date: finalEnd,
+            half_day_type: halfDayType,
+            leave_type_id: selectedType.id
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setDurationPreview(data);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    calc();
+  }, [startDate, endDate, halfDayType, selectedType]);
 
   // Handle Form Submission
   const handleSubmit = async (e) => {
@@ -450,6 +480,30 @@ export default function DoctorLiffPage() {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Live Duration Calculation Card */}
+          {durationPreview && (
+            <div className="p-3 bg-sky-50/90 border border-sky-100 rounded-xl flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-[#006699]" />
+                <div>
+                  <span className="font-semibold text-slate-700">คำนวณวันลาสุทธิ: </span>
+                  <span className="font-bold text-[#006699] text-sm">{durationPreview.duration_days} วัน</span>
+                  <span className="text-[10px] text-slate-500 ml-1">
+                    ({durationPreview.count_mode === 'WORKING_DAYS' ? 'นับเฉพาะวันทำการ' : 'นับทุกวันตามปฏิทิน'})
+                  </span>
+                </div>
+              </div>
+              {durationPreview.holidays_in_range?.length > 0 && (
+                <span
+                  className="text-[10px] bg-white text-[#006699] font-bold px-2 py-0.5 rounded-full border border-sky-200"
+                  title={durationPreview.holidays_in_range.map(h => `${h.holiday_date}: ${h.name_th}`).join(', ')}
+                >
+                  เว้นวันหยุด รพ. {durationPreview.holidays_in_range.length} วัน
+                </span>
+              )}
             </div>
           )}
 

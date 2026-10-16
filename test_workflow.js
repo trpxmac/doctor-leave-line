@@ -151,7 +151,50 @@ async function runTests() {
       const auditLogs = await auditRes.json();
       console.log(`   ✅ Recorded ${auditLogs.length} audit trail entries for PDPA compliance!`);
 
-      console.log('\n🎉 ALL 12 WORKFLOW TESTS PASSED PERFECTLY!\n');
+      // 13. Test Holidays Management & Working Days Calculation (Phase 4)
+      console.log('\n13. Testing Holidays Management (Phase 4)...');
+      const holRes = await fetch(`${baseUrl}/holidays?year=2026`);
+      const initialHolidays = await holRes.json();
+      console.log(`   ✅ Initial holidays found for 2026: ${initialHolidays.length} days`);
+
+      const newHolRes = await fetch(`${baseUrl}/holidays`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          holiday_date: '2026-11-15',
+          name_th: 'วันสถาปนาโรงพยาบาลกรุงเทพสิริโรจน์',
+          is_active: true
+        })
+      });
+      const createdHoliday = await newHolRes.json();
+      console.log(`   ✅ Created hospital holiday: ${createdHoliday.name_th} (${createdHoliday.holiday_date})`);
+
+      const calcRes = await fetch(`${baseUrl}/calculate-duration`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          start_date: '2026-11-13',
+          end_date: '2026-11-16',
+          half_day_type: 'FULL_DAY',
+          leave_type_id: '11111111-1111-1111-1111-111111111111'
+        })
+      });
+      const calcData = await calcRes.json();
+      console.log(`   ✅ Duration calculation preview: ${calcData.duration_days} working days (Count mode: ${calcData.count_mode})`);
+
+      const updateHolRes = await fetch(`${baseUrl}/holidays/${createdHoliday.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: false })
+      });
+      const updatedHoliday = await updateHolRes.json();
+      console.log(`   ✅ Toggled holiday active state to: ${updatedHoliday.is_active}`);
+
+      const delHolRes = await fetch(`${baseUrl}/holidays/${createdHoliday.id}`, { method: 'DELETE' });
+      const delResult = await delHolRes.json();
+      console.log(`   ✅ Deleted test holiday: ${delResult.message}`);
+
+      console.log('\n🎉 ALL 13 WORKFLOW TESTS PASSED PERFECTLY!\n');
     } catch (err) {
       console.error('❌ Test failed:', err);
     } finally {

@@ -1226,4 +1226,268 @@ router.get('/audit-logs', (req, res) => {
   res.json(enriched.slice(0, 100));
 });
 
+// -------------------------------------------------------------
+// HOLIDAYS MANAGEMENT (PHASE 4)
+// -------------------------------------------------------------
+
+// GET /api/holidays - List holidays, optionally filtered by year
+router.get('/holidays', (req, res) => {
+  const db = getDb();
+  if (!db.holidays) db.holidays = [];
+  
+  const { year, activeOnly } = req.query;
+  let list = [...db.holidays];
+  
+  if (year) {
+    list = list.filter(h => h.holiday_date.startsWith(`${year}-`));
+  }
+  
+  if (activeOnly === 'true') {
+    list = list.filter(h => h.is_active);
+  }
+  
+  list.sort((a, b) => a.holiday_date.localeCompare(b.holiday_date));
+  res.json(list);
+});
+
+// POST /api/holidays - Create new holiday
+router.post('/holidays', (req, res) => {
+  const db = getDb();
+  if (!db.holidays) db.holidays = [];
+  
+  const { holiday_date, name_th, is_active = true, actor_id } = req.body;
+  
+  if (!holiday_date || !name_th) {
+    return res.status(400).json({ error: 'กรุณาระบุวันที่และชื่อวันหยุด' });
+  }
+  
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(holiday_date)) {
+    return res.status(400).json({ error: 'รูปแบบวันที่ไม่ถูกต้อง (ต้องเป็น YYYY-MM-DD)' });
+  }
+  
+  const exists = db.holidays.find(h => h.holiday_date === holiday_date);
+  if (exists) {
+    return res.status(400).json({ error: `วันที่ ${holiday_date} มีในระบบแล้ว (${exists.name_th})` });
+  }
+  
+  const newHoliday = {
+    id: uuidv4(),
+    holiday_date,
+    name_th: name_th.trim(),
+    is_active: Boolean(is_active)
+  };
+  
+  db.holidays.push(newHoliday);
+  
+  // Audit log
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'holidays',
+    record_id: newHoliday.id,
+    action: 'INSERT',
+    actor_id: actor_id || null,
+    new_data: newHoliday,
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+  
+  saveStore();
+  res.status(201).json(newHoliday);
+});
+
+// PUT /api/holidays/:id - Update holiday
+router.put('/holidays/:id', (req, res) => {
+  const db = getDb();
+  if (!db.holidays) db.holidays = [];
+  
+  const { id } = req.params;
+  const { holiday_date, name_th, is_active, actor_id } = req.body;
+  
+  const index = db.holidays.findIndex(h => h.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'ไม่พบข้อมูลวันหยุดที่ระบุ' });
+  }
+  
+  const oldData = { ...db.holidays[index] };
+  
+  if (holiday_date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(holiday_date)) {
+      return res.status(400).json({ error: 'รูปแบบวันที่ไม่ถูกต้อง (ต้องเป็น YYYY-MM-DD)' });
+    }
+    const duplicate = db.holidays.find(h => h.holiday_date === holiday_date && h.id !== id);
+    if (duplicate) {
+      return res.status(400).json({ error: `วันที่ ${holiday_date} มีในระบบแล้ว (${duplicate.name_th})` });
+    }
+    db.holidays[index].holiday_date = holiday_date;
+  }
+  
+  if (name_th !== undefined) {
+    db.holidays[index].name_th = name_th.trim();
+  }
+  
+  if (is_active !== undefined) {
+    db.holidays[index].is_active = Boolean(is_active);
+  }
+  
+  // Audit log
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'holidays',
+    record_id: id,
+    action: 'UPDATE',
+    actor_id: actor_id || null,
+    old_data: oldData,
+    new_data: db.holidays[index],
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+  
+  saveStore();
+  res.json(db.holidays[index]);
+});
+
+// DELETE /api/holidays/:id - Remove holiday
+router.delete('/holidays/:id', (req, res) => {
+  const db = getDb();
+  if (!db.holidays) db.holidays = [];
+  
+  const { id } = req.params;
+  const index = db.holidays.findIndex(h => h.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'ไม่พบข้อมูลวันหยุดที่ระบุ' });
+  }
+  
+  const deletedItem = db.holidays[index];
+  db.holidays.splice(index, 1);
+  
+  // Audit log
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'holidays',
+    record_id: id,
+    action: 'DELETE',
+    actor_id: req.body?.actor_id || null,
+    old_data: deletedItem,
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+  
+  saveStore();
+  res.json({ message: 'ลบข้อมูลวันหยุดสำเร็จ', id });
+});
+
+// POST /api/holidays/seed-year - Seed standard Thai holidays for a given year
+router.post('/holidays/seed-year', (req, res) => {
+  const db = getDb();
+  if (!db.holidays) db.holidays = [];
+  
+  const targetYear = parseInt(req.body.year, 10) || new Date().getFullYear();
+  
+  const standardHolidays = [
+    { date: `${targetYear}-01-01`, name: 'วันขึ้นปีใหม่' },
+    { date: `${targetYear}-02-24`, name: 'วันมาฆบูชา' },
+    { date: `${targetYear}-04-06`, name: 'วันพระบาทสมเด็จพระพุทธยอดฟ้าจุฬาโลกมหาราช และวันที่ระลึกมหาจักรีบรมราชวงศ์ (วันจักรี)' },
+    { date: `${targetYear}-04-13`, name: 'วันสงกรานต์' },
+    { date: `${targetYear}-04-14`, name: 'วันสงกรานต์' },
+    { date: `${targetYear}-04-15`, name: 'วันสงกรานต์' },
+    { date: `${targetYear}-05-01`, name: 'วันแรงงานแห่งชาติ' },
+    { date: `${targetYear}-05-04`, name: 'วันฉัตรมงคล' },
+    { date: `${targetYear}-05-22`, name: 'วันวิสาขบูชา' },
+    { date: `${targetYear}-06-03`, name: 'วันเฉลิมพระชนมพรรษาสมเด็จพระนางเจ้าฯ พระบรมราชินี' },
+    { date: `${targetYear}-07-20`, name: 'วันอาสาฬหบูชา' },
+    { date: `${targetYear}-07-21`, name: 'วันเข้าพรรษา' },
+    { date: `${targetYear}-07-28`, name: 'วันพระบรมราชสมภพพระบาทสมเด็จพระวชิรเกล้าเจ้าอยู่หัว (ร.10)' },
+    { date: `${targetYear}-08-12`, name: 'วันแม่แห่งชาติ (วันเฉลิมพระชนมพรรษาสมเด็จพระบรมราชชนนีพันปีหลวง)' },
+    { date: `${targetYear}-10-13`, name: 'วันนวมินทรมหาราช (วันคล้ายวันสวรรคต ร.9)' },
+    { date: `${targetYear}-10-23`, name: 'วันปิยมหาราช' },
+    { date: `${targetYear}-12-05`, name: 'วันพ่อแห่งชาติ (วันคล้ายวันพระบรมราชสมภพ ร.9)' },
+    { date: `${targetYear}-12-10`, name: 'วันรัฐธรรมนูญ' },
+    { date: `${targetYear}-12-31`, name: 'วันสิ้นปี' }
+  ];
+  
+  let addedCount = 0;
+  for (const item of standardHolidays) {
+    const exists = db.holidays.some(h => h.holiday_date === item.date);
+    if (!exists) {
+      db.holidays.push({
+        id: uuidv4(),
+        holiday_date: item.date,
+        name_th: item.name,
+        is_active: true
+      });
+      addedCount++;
+    }
+  }
+  
+  if (addedCount > 0) {
+    db.audit_logs.push({
+      id: uuidv4(),
+      table_name: 'holidays',
+      record_id: 'batch-seed',
+      action: 'INSERT',
+      actor_id: req.body?.actor_id || null,
+      new_data: { note: `Imported standard holidays for year ${targetYear}`, addedCount },
+      ip_address: req.ip || '127.0.0.1',
+      created_at: new Date().toISOString()
+    });
+    saveStore();
+  }
+  
+  res.json({
+    message: `เพิ่มวันหยุดมาตรฐานประจำปี ${targetYear} สำเร็จ (${addedCount} วันใหม่)`,
+    addedCount,
+    total: db.holidays.filter(h => h.holiday_date.startsWith(`${targetYear}-`)).length
+  });
+});
+
+// POST /api/calculate-duration - Preview duration calculation with holidays breakdown
+router.post('/calculate-duration', (req, res) => {
+  const db = getDb();
+  const { start_date, end_date, half_day_type, leave_type_id } = req.body;
+
+  if (!start_date || !end_date) {
+    return res.status(400).json({ error: 'กรุณาระบุวันเริ่มต้นและสิ้นสุด' });
+  }
+
+  const leaveType = db.leave_types.find(lt => lt.id === leave_type_id);
+  const countMode = leaveType ? leaveType.count_mode : 'CALENDAR_DAYS';
+  const holidays = (db.holidays || []).filter(h => h.is_active);
+
+  if (half_day_type === 'MORNING' || half_day_type === 'AFTERNOON') {
+    return res.json({
+      duration_days: 0.5,
+      count_mode: countMode,
+      holidays_in_range: []
+    });
+  }
+
+  const duration_days = calculateDays(start_date, end_date, countMode, holidays);
+
+  // Find holidays that fall within this range
+  const holidaySet = new Set(holidays.map(h => h.holiday_date));
+  const holidaysInRange = [];
+  const start = new Date(start_date);
+  const end = new Date(end_date);
+  const current = new Date(start);
+
+  while (current <= end) {
+    const year = current.getFullYear();
+    const month = String(current.getMonth() + 1).padStart(2, '0');
+    const date = String(current.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${date}`;
+
+    if (holidaySet.has(dateStr)) {
+      const hObj = holidays.find(h => h.holiday_date === dateStr);
+      holidaysInRange.push(hObj);
+    }
+    current.setDate(current.getDate() + 1);
+  }
+
+  res.json({
+    duration_days,
+    count_mode: countMode,
+    holidays_in_range: holidaysInRange
+  });
+});
+
 export default router;

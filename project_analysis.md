@@ -183,7 +183,7 @@ approver_id: 'c0000000-0000-0000-0000-000000000002',
 | # | ฟีเจอร์ | หมายเหตุ |
 |---|---------|----------|
 | 22 | คำนวณสิทธิ์วันลาพักร้อนประจำปี (Tenure) | HR กำหนดวันที่เริ่มงาน และระบบคำนวณ/ทบวันลาให้ตามเงื่อนไขอัตโนมัติ (เช่น < 3 ปี ได้เพิ่ม 0.5 วัน/เดือน) |
-| 23 | จัดการวันหยุดนักขัตฤกษ์ (Public Holidays) | หน้า UI ให้ Admin เพิ่ม/ลบ/แก้ไข วันหยุดประจำปี |
+| 23 | จัดการวันหยุดนักขัตฤกษ์ (Public Holidays) | ✅ เสร็จ - หน้า UI จัดการวันหยุด รพ. ([AdminHolidaysPage.jsx](file:///d:/doctor-leave-line/src/pages/AdminHolidaysPage.jsx)), ปุ่ม Quick Seed วันหยุดราชการไทย, Duration Preview แบบเรียลไทม์ และผูกกับ Working Days Engine |
 | 24 | ตั้งค่าโครงสร้างผู้อนุมัติ (Line Approve) | หน้า UI สำหรับผูกสายบังคับบัญชาแบบเจาะจงบุคคล (Approver 1, 2, 3) แทนที่การล็อกเป็นหัวหน้าแผนก |
 | 25 | จัดการรูปแบบการลา (Leave Types) | หน้า UI สำหรับเพิ่ม/ลด และตั้งค่ารูปแบบการลา |
 | 26 | ระบบจัดการตารางเวร (Shift & Schedule) | ระบบจัดตารางเวร (Consult, ER, Night Duty) และซิงก์ข้อมูลวันที่ลาไม่ให้ชนกับวันเข้าเวร |
@@ -218,8 +218,9 @@ graph TD
     C --> C4["18. Export Reports (Done)"]
     
     D --> D1["22. Tenure Leave Calculation"]
-    D --> D2["23. Master Data UI (Holidays, Approvers)"]
-    D --> D3["26. Shift Schedule Management"]
+    D --> D2["23. Holidays Management UI & Engine (Done)"]
+    D --> D3["24. Approver Hierarchy & Leave Types"]
+    D --> D4["26. Shift Schedule Management"]
 ```
 
 ---
@@ -229,9 +230,10 @@ graph TD
 | หมวด | เสร็จ | เหลือ |
 |------|-------|-------|
 | **Database Schema** | ✅ 100% | — |
-| **Backend API** | ✅ 100% | Validation, Reminders, Cancel Notification, Overlap Check, Quota Fallback |
+| **Backend API** | ✅ 100% | Validation, Reminders, Cancel Notification, Overlap Check, Quota Fallback, Holidays CRUD |
 | **LINE Flex Messages** | ✅ 100% | รองรับครบถ้วน และแก้ปัญหา opacity 400 Bad Request แล้ว |
-| **Frontend Pages** | ✅ 100% | สร้างปฏิทิน Calendar View และหน้าจอต่างๆ ครบถ้วนตาม PRD |
+| **Frontend Pages** | ✅ 100% | สร้าง Calendar View, Holidays Management และหน้าจอครบถ้วนตาม PRD |
+| **Public Holidays Engine** | ✅ 100% | หน้า UI แอดมิน, Quick Seed วันหยุดไทย, Live Duration Preview หักวันหยุดอัตโนมัติ |
 | **LINE LIFF Auth** | ✅ 100% | ทำ Onboarding flow และดึงโปรไฟล์จาก @line/liff สำเร็จ |
 | **LINE Rich Menu** | ✅ 100% | (รอการตั้งค่าใน LINE Developer Console) |
 | **Role-Based Access** | ✅ 100% | Navbar filter และ ProtectedRoute ทำงานเรียบร้อย |

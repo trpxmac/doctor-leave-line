@@ -17,7 +17,8 @@ import {
   RefreshCw,
   Hospital,
   ChevronRight,
-  Download
+  Download,
+  CalendarDays
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import CalendarView from '../components/CalendarView';
@@ -214,6 +215,14 @@ export default function AdminDashboardPage() {
             <Download className="w-4 h-4" />
             <span>ดาวน์โหลด (CSV)</span>
           </button>
+
+          <Link
+            to="/admin/holidays"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-sky-50 hover:bg-sky-100 text-[#006699] border border-sky-200 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-98"
+          >
+            <CalendarDays className="w-4 h-4 text-[#006699]" />
+            <span>ปฏิทินวันหยุด รพ.</span>
+          </Link>
 
           <button
             onClick={() => setShowCreateModal(true)}

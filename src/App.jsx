@@ -8,6 +8,7 @@ import ApproverPage from './pages/ApproverPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminCriteriaPage from './pages/AdminCriteriaPage';
 import AdminAuditPage from './pages/AdminAuditPage';
+import AdminHolidaysPage from './pages/AdminHolidaysPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import OnboardingPage from './pages/OnboardingPage';
 
@@ -60,6 +61,11 @@ function AppContent() {
               <Route path="/admin/audit" element={
                 <ProtectedRoute allowedRoles={['MEDICAL_ADMIN', 'ADMIN']}>
                   <AdminAuditPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/holidays" element={
+                <ProtectedRoute allowedRoles={['MEDICAL_ADMIN', 'ADMIN']}>
+                  <AdminHolidaysPage />
                 </ProtectedRoute>
               } />
               <Route path="*" element={<Navigate to="/" replace />} />
