@@ -117,6 +117,21 @@ async function main() {
     }
     console.log('   ✅ Set as default Rich Menu for all users successfully!');
 
+    // D. Also link directly to TEST_LINE_USER_ID (Top Priority 1 Override)
+    const testUserId = process.env.TEST_LINE_USER_ID;
+    if (testUserId && testUserId.startsWith('U')) {
+      console.log(`Step 4: Linking directly to User ID (${testUserId}) as Priority 1...`);
+      const linkRes = await fetch(`https://api.line.me/v2/bot/user/${testUserId}/richmenu/${richMenuId}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${TOKEN}` }
+      });
+      if (linkRes.ok) {
+        console.log(`   ✅ Direct User Link SUCCESS: Linked to ${testUserId}`);
+      } else {
+        console.warn(`   ⚠️ Direct User Link error:`, await linkRes.text());
+      }
+    }
+
     console.log('\n🎉 SUCCESS! Your LINE Official Account Rich Menu is now live and active for Bangkok Hospital Siriroj!');
   } catch (err) {
     console.error('❌ Failed to provision Rich Menu:', err.message);
