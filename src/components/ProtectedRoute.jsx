@@ -71,7 +71,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
           </div>
 
           <div className="pt-2 flex flex-col gap-2">
-            {doctors && doctors.some(d => (d.roles || []).includes('ADMIN') || (d.roles || []).includes('MEDICAL_ADMIN')) && (
+            {!isLiffMode && doctors && doctors.some(d => (d.roles || []).includes('ADMIN') || (d.roles || []).includes('MEDICAL_ADMIN')) && (
               <button
                 onClick={() => {
                   const adminDoc = doctors.find(d => (d.roles || []).includes('ADMIN') || (d.roles || []).includes('MEDICAL_ADMIN'));
