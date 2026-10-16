@@ -20,7 +20,8 @@ import {
   Download,
   CalendarDays,
   Award,
-  GitMerge
+  GitMerge,
+  CalendarRange
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import CalendarView from '../components/CalendarView';
@@ -240,6 +241,14 @@ export default function AdminDashboardPage() {
           >
             <GitMerge className="w-4 h-4 text-purple-700" />
             <span>สายอนุมัติ & การลา</span>
+          </Link>
+
+          <Link
+            to="/admin/shifts"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-98"
+          >
+            <CalendarRange className="w-4 h-4 text-emerald-700" />
+            <span>ตารางเวรแพทย์</span>
           </Link>
 
           <button

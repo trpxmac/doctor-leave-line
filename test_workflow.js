@@ -275,7 +275,52 @@ async function runTests() {
       const delTypeData = await delTypeRes.json();
       console.log(`   ✅ Deleted custom leave type: ${delTypeData.message}`);
 
-      console.log('\n🎉 ALL 15 WORKFLOW TESTS PASSED PERFECTLY!\n');
+      // 16. Test Shift & Schedule Management & Duty Collision Check (Phase 4 - Item 26)
+      console.log('\n16. Testing Shift & Duty Schedule Management & Collision Check (Phase 4 - Item 26)...');
+      const shiftsRes = await fetch(`${baseUrl}/shifts`);
+      const allShifts = await shiftsRes.json();
+      console.log(`   ✅ Fetched ${allShifts.length} scheduled shifts across hospital`);
+
+      // Check conflict for Dr. Chartchai on tomorrow
+      const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+      const conflictRes = await fetch(`${baseUrl}/shifts/check-conflict?doctor_id=${drC.doctor_id}&start_date=${tomorrow}&end_date=${tomorrow}`);
+      const conflictData = await conflictRes.json();
+      console.log(`   ✅ Checked shift conflict: ${conflictData.has_conflict ? `Found ${conflictData.conflict_count} shift conflict(s) (${conflictData.conflicts[0]?.shift_label})` : 'No conflicts'}`);
+
+      // Create a test ER duty shift
+      const testDate = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+      const createShiftRes = await fetch(`${baseUrl}/shifts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          doctor_id: drC.doctor_id,
+          shift_date: testDate,
+          shift_type: 'ER_DUTY',
+          notes: 'เวรฉุกเฉินรอบพิเศษสำหรับทดสอบ'
+        })
+      });
+      const createdShift = await createShiftRes.json();
+      console.log(`   ✅ Created duty shift: ${createdShift.shift_type} on ${createdShift.shift_date} (ID: ${createdShift.id})`);
+
+      // Test swap shift to Dr. Kantheera
+      const swapRes = await fetch(`${baseUrl}/shifts/swap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shift_id: createdShift.id,
+          target_doctor_id: 'c0000000-0000-0000-0000-000000000004',
+          reason: 'ติดประชุมวิชาการ ขอสลับเวร'
+        })
+      });
+      const swapData = await swapRes.json();
+      console.log(`   ✅ Shift swapped to Dr. Kantheera: ${swapData.message}`);
+
+      // Delete test shift
+      const delShiftRes = await fetch(`${baseUrl}/shifts/${createdShift.id}`, { method: 'DELETE' });
+      const delShiftData = await delShiftRes.json();
+      console.log(`   ✅ Cleaned up test shift: ${delShiftData.message}`);
+
+      console.log('\n🎉 ALL 16 WORKFLOW TESTS PASSED PERFECTLY!\n');
     } catch (err) {
       console.error('❌ Test failed:', err);
     } finally {

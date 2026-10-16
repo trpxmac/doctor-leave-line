@@ -140,6 +140,15 @@ export function buildDoctorSubmittedFlex(request, doctor, leaveType) {
               { type: 'text', text: request.reason || 'ไม่ระบุ', size: 'sm', color: '#334155', flex: 5, wrap: true }
             ]
           },
+          request.substitute_doctor_name ? {
+            type: 'box',
+            layout: 'horizontal',
+            margin: 'xs',
+            contents: [
+              { type: 'text', text: 'แพทย์รับเวรแทน:', size: 'xs', color: '#64748b', flex: 3 },
+              { type: 'text', text: request.substitute_doctor_name, size: 'xs', weight: 'bold', color: '#0284c7', flex: 5, wrap: true }
+            ]
+          } : { type: 'filler' },
           request.is_emergency ? {
             type: 'box',
             layout: 'vertical',
@@ -259,6 +268,15 @@ export function buildApproverRequestFlex(request, doctor, leaveType, quotaInfo, 
               { type: 'text', text: request.reason || 'ไม่ระบุ', size: 'sm', color: '#334155', flex: 5, wrap: true }
             ]
           },
+          request.substitute_doctor_name ? {
+            type: 'box',
+            layout: 'horizontal',
+            margin: 'xs',
+            contents: [
+              { type: 'text', text: 'แพทย์รับเวรแทน:', size: 'xs', color: '#64748b', flex: 3 },
+              { type: 'text', text: request.substitute_doctor_name, size: 'xs', weight: 'bold', color: '#0284c7', flex: 5, wrap: true }
+            ]
+          } : { type: 'filler' },
           {
             type: 'box',
             layout: 'horizontal',

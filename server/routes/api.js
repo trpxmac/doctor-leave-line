@@ -553,6 +553,7 @@ router.get('/leave-requests', (req, res) => {
   // Enrich with doctor and leave_type details
   const enriched = list.map(reqItem => {
     const doc = db.doctors.find(d => d.id === reqItem.doctor_id);
+    const subDoc = reqItem.substitute_doctor_id ? db.doctors.find(d => d.id === reqItem.substitute_doctor_id) : null;
     const dept = doc ? db.departments.find(dp => dp.id === doc.department_id) : null;
     const leaveType = db.leave_types.find(lt => lt.id === reqItem.leave_type_id);
     const attachments = db.leave_attachments.filter(a => a.request_id === reqItem.id);
@@ -569,6 +570,13 @@ router.get('/leave-requests', (req, res) => {
         department_name: dept ? dept.name_th : '',
         department_id: doc.department_id,
         avatar: doc.avatar
+      } : null,
+      substitute_doctor: subDoc ? {
+        id: subDoc.id,
+        employee_id: subDoc.employee_id,
+        name: `${subDoc.prefix_th}${subDoc.first_name_th} ${subDoc.last_name_th}`,
+        avatar: subDoc.avatar,
+        phone: subDoc.phone
       } : null,
       leave_type: leaveType ? {
         id: leaveType.id,
@@ -593,6 +601,7 @@ router.get('/leave-requests/:id', (req, res) => {
   if (!reqItem) return res.status(404).json({ error: 'Leave request not found' });
 
   const doc = db.doctors.find(d => d.id === reqItem.doctor_id);
+  const subDoc = reqItem.substitute_doctor_id ? db.doctors.find(d => d.id === reqItem.substitute_doctor_id) : null;
   const dept = doc ? db.departments.find(dp => dp.id === doc.department_id) : null;
   const leaveType = db.leave_types.find(lt => lt.id === reqItem.leave_type_id);
   const attachments = db.leave_attachments.filter(a => a.request_id === reqItem.id);
@@ -609,6 +618,13 @@ router.get('/leave-requests/:id', (req, res) => {
       department_name: dept ? dept.name_th : '',
       department_id: doc.department_id,
       avatar: doc.avatar
+    } : null,
+    substitute_doctor: subDoc ? {
+      id: subDoc.id,
+      employee_id: subDoc.employee_id,
+      name: `${subDoc.prefix_th}${subDoc.first_name_th} ${subDoc.last_name_th}`,
+      avatar: subDoc.avatar,
+      phone: subDoc.phone
     } : null,
     leave_type: leaveType,
     attachments,
@@ -629,7 +645,9 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
       half_day_type = 'FULL_DAY',
       reason = '',
       upload_later = 'false',
-      submitted_by_admin = 'false'
+      submitted_by_admin = 'false',
+      substitute_doctor_id = null,
+      duty_handover_notes = ''
     } = body;
 
     if (!doctor_id || !leave_type_id || !start_date || !end_date) {
@@ -731,6 +749,22 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
       };
     }
 
+    // Shift Collision Check (Feature #26)
+    const conflictingShifts = (db.doctor_shifts || []).filter(s =>
+      s.doctor_id === doctor_id &&
+      s.status === 'SCHEDULED' &&
+      s.shift_date >= start_date &&
+      s.shift_date <= end_date
+    );
+    const hasShiftConflict = conflictingShifts.length > 0;
+    let substituteDoctorName = null;
+    if (substitute_doctor_id) {
+      const subDoc = db.doctors.find(d => d.id === substitute_doctor_id);
+      if (subDoc) {
+        substituteDoctorName = `${subDoc.prefix_th}${subDoc.first_name_th} ${subDoc.last_name_th}`;
+      }
+    }
+
     // Generate Request Number (Format: LV-YYYY-NNNNN)
     const currentYear = new Date().getFullYear();
     const countThisYear = db.leave_requests.filter(r => r.request_no && r.request_no.includes(`LV-${currentYear}`)).length + 1;
@@ -749,12 +783,26 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
       is_emergency: isEmergency,
       is_exception: isException,
       upload_later: upload_later === 'true' || upload_later === true,
+      substitute_doctor_id: substitute_doctor_id || null,
+      substitute_doctor_name: substituteDoctorName,
+      duty_handover_notes: duty_handover_notes ? duty_handover_notes.trim() : null,
+      has_shift_conflict: hasShiftConflict,
       status: 'PENDING',
       current_step: 1,
       total_steps: 1,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
+
+    // Automatically cover conflicting shifts if substitute doctor provided
+    if (hasShiftConflict && substitute_doctor_id) {
+      conflictingShifts.forEach(shift => {
+        shift.status = 'COVERED';
+        shift.substitute_doctor_id = substitute_doctor_id;
+        shift.leave_request_id = newRequest.id;
+        shift.notes = `${shift.notes ? shift.notes + ' | ' : ''}มีผู้ปฏิบัติหน้าที่แทนเนื่องจากลา (${requestNo})`;
+      });
+    }
 
     // Save attachments if uploaded
     if (req.files && req.files.length > 0) {
@@ -2079,6 +2127,426 @@ router.post('/approval-routes/batch-department', (req, res) => {
 
   saveStore();
   res.json({ message: `กำหนดผู้อนุมัติให้แพทย์ในแผนกเรียบร้อย (${count} ท่าน)`, count });
+});
+
+// -------------------------------------------------------------
+// SHIFT & SCHEDULE MANAGEMENT (Feature #26)
+// -------------------------------------------------------------
+
+const SHIFT_TYPE_MAP = {
+  OPD_MORNING: {
+    label: 'OPD เช้า',
+    full_label: 'ตรวจผู้ป่วยนอกรอบเช้า (08:00 - 12:00)',
+    color: '#0284c7',
+    start_time: '08:00',
+    end_time: '12:00',
+    is_mandatory_handover: false
+  },
+  OPD_AFTERNOON: {
+    label: 'OPD บ่าย',
+    full_label: 'ตรวจผู้ป่วยนอกรอบบ่าย (13:00 - 17:00)',
+    color: '#0ea5e9',
+    start_time: '13:00',
+    end_time: '17:00',
+    is_mandatory_handover: false
+  },
+  IPD_ROUND: {
+    label: 'Ward Round',
+    full_label: 'ตรวจเยี่ยมผู้ป่วยใน (09:00 - 13:00)',
+    color: '#8b5cf6',
+    start_time: '09:00',
+    end_time: '13:00',
+    is_mandatory_handover: true
+  },
+  ER_DUTY: {
+    label: 'เวร ER',
+    full_label: 'เวรแพทย์ห้องฉุกเฉิน (08:00 - 20:00)',
+    color: '#ef4444',
+    start_time: '08:00',
+    end_time: '20:00',
+    is_mandatory_handover: true
+  },
+  NIGHT_DUTY: {
+    label: 'เวรดึก',
+    full_label: 'เวรดึกประจำโรงพยาบาล (20:00 - 08:00)',
+    color: '#6366f1',
+    start_time: '20:00',
+    end_time: '08:00',
+    is_mandatory_handover: true
+  },
+  ON_CALL: {
+    label: 'On-Call',
+    full_label: 'เวรแพทย์ให้คำปรึกษาทางโทรศัพท์ (24 ชม.)',
+    color: '#10b981',
+    start_time: '08:00',
+    end_time: '08:00',
+    is_mandatory_handover: true
+  }
+};
+
+// GET /api/shifts - List shifts with filters and conflict enrichment
+router.get('/shifts', (req, res) => {
+  const db = getDb();
+  const { department_id, doctor_id, month, year, start_date, end_date, status } = req.query;
+
+  let shifts = db.doctor_shifts || [];
+
+  if (department_id) {
+    shifts = shifts.filter(s => s.department_id === department_id);
+  }
+  if (doctor_id) {
+    shifts = shifts.filter(s => s.doctor_id === doctor_id);
+  }
+  if (status) {
+    shifts = shifts.filter(s => s.status === status);
+  }
+  if (month && year) {
+    const padMonth = String(month).padStart(2, '0');
+    const target = `${year}-${padMonth}`;
+    shifts = shifts.filter(s => s.shift_date && s.shift_date.startsWith(target));
+  }
+  if (start_date && end_date) {
+    shifts = shifts.filter(s => s.shift_date >= start_date && s.shift_date <= end_date);
+  }
+
+  // Enrich with doctor, department, substitute, and conflict status
+  const enriched = shifts.map(shift => {
+    const doc = db.doctors.find(d => d.id === shift.doctor_id);
+    const subDoc = shift.substitute_doctor_id ? db.doctors.find(d => d.id === shift.substitute_doctor_id) : null;
+    const dept = db.departments.find(dp => dp.id === shift.department_id);
+    const typeMeta = SHIFT_TYPE_MAP[shift.shift_type] || {
+      label: shift.shift_type,
+      full_label: shift.shift_type,
+      color: '#64748b',
+      is_mandatory_handover: false
+    };
+
+    // Check if doctor has active leave request on this shift date
+    const leaveConflict = (db.leave_requests || []).find(r => 
+      r.doctor_id === shift.doctor_id &&
+      (r.status === 'PENDING' || r.status === 'APPROVED') &&
+      shift.shift_date >= r.start_date &&
+      shift.shift_date <= r.end_date
+    );
+
+    return {
+      ...shift,
+      shift_type_meta: typeMeta,
+      doctor: doc ? {
+        id: doc.id,
+        name: `${doc.prefix_th}${doc.first_name_th} ${doc.last_name_th}`,
+        employee_id: doc.employee_id,
+        doctor_type: doc.doctor_type,
+        avatar: doc.avatar
+      } : null,
+      substitute_doctor: subDoc ? {
+        id: subDoc.id,
+        name: `${subDoc.prefix_th}${subDoc.first_name_th} ${subDoc.last_name_th}`,
+        employee_id: subDoc.employee_id,
+        avatar: subDoc.avatar
+      } : null,
+      department: dept ? {
+        id: dept.id,
+        code: dept.code,
+        name_th: dept.name_th
+      } : null,
+      has_leave_conflict: Boolean(leaveConflict),
+      conflict_leave: leaveConflict ? {
+        id: leaveConflict.id,
+        request_no: leaveConflict.request_no,
+        status: leaveConflict.status,
+        duration_days: leaveConflict.duration_days
+      } : null
+    };
+  });
+
+  enriched.sort((a, b) => a.shift_date.localeCompare(b.shift_date));
+  res.json(enriched);
+});
+
+// GET /api/shifts/check-conflict - Real-time collision detection before leave submission
+router.get('/shifts/check-conflict', (req, res) => {
+  const db = getDb();
+  const { doctor_id, start_date, end_date, half_day_type = 'FULL_DAY' } = req.query;
+
+  if (!doctor_id || !start_date || !end_date) {
+    return res.status(400).json({ error: 'doctor_id, start_date, and end_date are required' });
+  }
+
+  const shifts = (db.doctor_shifts || []).filter(s =>
+    s.doctor_id === doctor_id &&
+    s.status === 'SCHEDULED' &&
+    s.shift_date >= start_date &&
+    s.shift_date <= end_date
+  );
+
+  const conflicts = shifts.map(s => {
+    const meta = SHIFT_TYPE_MAP[s.shift_type] || {};
+    return {
+      id: s.id,
+      shift_date: s.shift_date,
+      shift_type: s.shift_type,
+      shift_label: meta.label || s.shift_type,
+      full_label: meta.full_label || s.shift_type,
+      time: `${s.start_time || '08:00'} - ${s.end_time || '16:00'}`,
+      is_mandatory_handover: Boolean(meta.is_mandatory_handover),
+      notes: s.notes
+    };
+  });
+
+  const requiresSubstitute = conflicts.some(c => c.is_mandatory_handover);
+
+  res.json({
+    has_conflict: conflicts.length > 0,
+    conflict_count: conflicts.length,
+    conflicts,
+    requires_substitute: requiresSubstitute,
+    message: conflicts.length > 0
+      ? `ตรวจพบตารางเวร ${conflicts.length} รายการตรงกับช่วงวันลา${requiresSubstitute ? ' (จำเป็นต้องระบุแพทย์รับเวรแทน)' : ''}`
+      : 'ไม่พบตารางเวรตรงกับช่วงวันลา'
+  });
+});
+
+// POST /api/shifts - Create single shift
+router.post('/shifts', (req, res) => {
+  const db = getDb();
+  const {
+    doctor_id,
+    shift_date,
+    shift_type,
+    department_id,
+    start_time,
+    end_time,
+    notes = '',
+    actor_id
+  } = req.body;
+
+  if (!doctor_id || !shift_date || !shift_type) {
+    return res.status(400).json({ error: 'กรุณาระบุแพทย์, วันที่ และประเภทเวร' });
+  }
+
+  const doc = db.doctors.find(d => d.id === doctor_id);
+  const deptId = department_id || (doc ? doc.department_id : null);
+  const meta = SHIFT_TYPE_MAP[shift_type] || {};
+
+  const newShift = {
+    id: uuidv4(),
+    doctor_id,
+    shift_date,
+    shift_type,
+    department_id: deptId,
+    start_time: start_time || meta.start_time || '08:00',
+    end_time: end_time || meta.end_time || '16:00',
+    status: 'SCHEDULED',
+    substitute_doctor_id: null,
+    notes: notes.trim(),
+    created_at: new Date().toISOString()
+  };
+
+  if (!db.doctor_shifts) db.doctor_shifts = [];
+  db.doctor_shifts.push(newShift);
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'doctor_shifts',
+    record_id: newShift.id,
+    action: 'INSERT',
+    actor_id: actor_id || null,
+    new_data: newShift,
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.status(201).json(newShift);
+});
+
+// PUT /api/shifts/:id - Update shift
+router.put('/shifts/:id', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  const index = (db.doctor_shifts || []).findIndex(s => s.id === id);
+
+  if (index === -1) {
+    return res.status(404).json({ error: 'ไม่พบตารางเวรที่ระบุ' });
+  }
+
+  const oldData = { ...db.doctor_shifts[index] };
+  const updates = req.body;
+
+  if (updates.doctor_id) db.doctor_shifts[index].doctor_id = updates.doctor_id;
+  if (updates.shift_date) db.doctor_shifts[index].shift_date = updates.shift_date;
+  if (updates.shift_type) db.doctor_shifts[index].shift_type = updates.shift_type;
+  if (updates.start_time) db.doctor_shifts[index].start_time = updates.start_time;
+  if (updates.end_time) db.doctor_shifts[index].end_time = updates.end_time;
+  if (updates.status) db.doctor_shifts[index].status = updates.status;
+  if (updates.substitute_doctor_id !== undefined) db.doctor_shifts[index].substitute_doctor_id = updates.substitute_doctor_id;
+  if (updates.notes !== undefined) db.doctor_shifts[index].notes = updates.notes;
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'doctor_shifts',
+    record_id: id,
+    action: 'UPDATE',
+    actor_id: updates.actor_id || null,
+    old_data: oldData,
+    new_data: db.doctor_shifts[index],
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.json(db.doctor_shifts[index]);
+});
+
+// DELETE /api/shifts/:id - Delete shift
+router.delete('/shifts/:id', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  const index = (db.doctor_shifts || []).findIndex(s => s.id === id);
+
+  if (index === -1) {
+    return res.status(404).json({ error: 'ไม่พบตารางเวรที่ระบุ' });
+  }
+
+  const removed = db.doctor_shifts.splice(index, 1)[0];
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'doctor_shifts',
+    record_id: id,
+    action: 'DELETE',
+    actor_id: req.body?.actor_id || null,
+    old_data: removed,
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.json({ message: 'ลบรายการเวรสำเร็จ', id });
+});
+
+// POST /api/shifts/swap - Shift swap between two doctors
+router.post('/shifts/swap', (req, res) => {
+  const db = getDb();
+  const { shift_id, target_doctor_id, reason = '', actor_id } = req.body;
+
+  if (!shift_id || !target_doctor_id) {
+    return res.status(400).json({ error: 'กรุณาระบุเวรที่ต้องการแลกและแพทย์ผู้รับเวร' });
+  }
+
+  const shift = (db.doctor_shifts || []).find(s => s.id === shift_id);
+  if (!shift) {
+    return res.status(404).json({ error: 'ไม่พบรายการเวรที่ระบุ' });
+  }
+
+  const oldDocId = shift.doctor_id;
+  shift.doctor_id = target_doctor_id;
+  shift.status = 'SWAPPED';
+  shift.notes = `${shift.notes ? shift.notes + ' | ' : ''}แลกเวรจากเดิม: ${reason || 'ตามข้อตกลง'}`;
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'doctor_shifts',
+    record_id: shift.id,
+    action: 'SWAP',
+    actor_id: actor_id || null,
+    old_data: { doctor_id: oldDocId },
+    new_data: { doctor_id: target_doctor_id, reason },
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.json({ message: 'บันทึกการแลกเวรสำเร็จ', shift });
+});
+
+// POST /api/shifts/batch-monthly - Auto-generate department duty roster for whole month
+router.post('/shifts/batch-monthly', (req, res) => {
+  const db = getDb();
+  const { department_id, year, month, actor_id, overwrite = false } = req.body;
+
+  if (!department_id || !year || !month) {
+    return res.status(400).json({ error: 'กรุณาระบุแผนก, ปี และเดือน' });
+  }
+
+  const deptDoctors = db.doctors.filter(d => d.department_id === department_id && d.is_active);
+  if (deptDoctors.length === 0) {
+    return res.status(400).json({ error: 'ไม่พบแพทย์ที่สังกัดแผนกนี้' });
+  }
+
+  const numYear = Number(year);
+  const numMonth = Number(month);
+  const daysInMonth = new Date(numYear, numMonth, 0).getDate();
+  const padMonth = String(numMonth).padStart(2, '0');
+
+  if (!db.doctor_shifts) db.doctor_shifts = [];
+
+  // If overwrite, remove existing shifts for this department and month
+  if (overwrite) {
+    const targetPrefix = `${numYear}-${padMonth}`;
+    db.doctor_shifts = db.doctor_shifts.filter(
+      s => !(s.department_id === department_id && s.shift_date.startsWith(targetPrefix))
+    );
+  }
+
+  let createdCount = 0;
+  const shiftTypes = ['OPD_MORNING', 'OPD_AFTERNOON', 'IPD_ROUND', 'ER_DUTY', 'ON_CALL'];
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const padDay = String(day).padStart(2, '0');
+    const dateStr = `${numYear}-${padMonth}-${padDay}`;
+    const dateObj = new Date(numYear, numMonth - 1, day);
+    const dayOfWeek = dateObj.getDay(); // 0 = Sun, 6 = Sat
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+    // Distribute duties among doctors
+    deptDoctors.forEach((doc, docIdx) => {
+      // Rotate duty pattern
+      const dutyIndex = (day + docIdx) % shiftTypes.length;
+      const typeKey = shiftTypes[dutyIndex];
+      const meta = SHIFT_TYPE_MAP[typeKey];
+
+      // Check if shift already exists for this doctor and date
+      const exists = db.doctor_shifts.some(
+        s => s.doctor_id === doc.id && s.shift_date === dateStr && s.shift_type === typeKey
+      );
+
+      if (!exists) {
+        db.doctor_shifts.push({
+          id: uuidv4(),
+          doctor_id: doc.id,
+          shift_date: dateStr,
+          shift_type: typeKey,
+          department_id,
+          start_time: isWeekend && typeKey === 'ER_DUTY' ? '08:00' : meta.start_time,
+          end_time: isWeekend && typeKey === 'ER_DUTY' ? '20:00' : meta.end_time,
+          status: 'SCHEDULED',
+          substitute_doctor_id: null,
+          notes: isWeekend ? 'เวรวันหยุดสุดสัปดาห์' : 'ตารางเวรประจำวันตามรอบ',
+          created_at: new Date().toISOString()
+        });
+        createdCount++;
+      }
+    });
+  }
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'doctor_shifts',
+    record_id: `batch-${department_id}-${numYear}-${padMonth}`,
+    action: 'BATCH_GENERATE',
+    actor_id: actor_id || null,
+    new_data: { department_id, year: numYear, month: numMonth, created_count: createdCount },
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.json({
+    message: `สร้างตารางเวรประจำเดือน ${padMonth}/${numYear} เรียบร้อยแล้ว (${createdCount} รายการ)`,
+    created_count: createdCount
+  });
 });
 
 export default router;

@@ -422,6 +422,86 @@ const getInitialSeedData = () => {
     fiscal_year_start_month: 1
   };
 
+  const getOffsetDate = (offsetDays) => {
+    const d = new Date(Date.now() + offsetDays * 86400000);
+    return d.toISOString().split('T')[0];
+  };
+
+  const doctor_shifts = [
+    {
+      id: '00000000-0000-0000-0000-000000002001',
+      doctor_id: 'c0000000-0000-0000-0000-000000000003', // Dr. Chartchai
+      shift_date: getOffsetDate(1),
+      shift_type: 'OPD_MORNING',
+      department_id: 'd1111111-1111-1111-1111-111111111111',
+      start_time: '08:00',
+      end_time: '12:00',
+      status: 'SCHEDULED',
+      substitute_doctor_id: null,
+      notes: 'ตรวจผู้ป่วยนอกอายุรกรรมทั่วไป คลินิก 1'
+    },
+    {
+      id: '00000000-0000-0000-0000-000000002002',
+      doctor_id: 'c0000000-0000-0000-0000-000000000003', // Dr. Chartchai
+      shift_date: getOffsetDate(3),
+      shift_type: 'ER_DUTY',
+      department_id: 'd1111111-1111-1111-1111-111111111111',
+      start_time: '08:00',
+      end_time: '20:00',
+      status: 'SCHEDULED',
+      substitute_doctor_id: null,
+      notes: 'เวรแพทย์ฉุกเฉินชั้น 1 (Emergency Department)'
+    },
+    {
+      id: '00000000-0000-0000-0000-000000002003',
+      doctor_id: 'c0000000-0000-0000-0000-000000000003', // Dr. Chartchai
+      shift_date: nextWeekStr,
+      shift_type: 'NIGHT_DUTY',
+      department_id: 'd1111111-1111-1111-1111-111111111111',
+      start_time: '20:00',
+      end_time: '08:00',
+      status: 'SCHEDULED',
+      substitute_doctor_id: null,
+      notes: 'เวรดึกประจำตึกอายุรกรรม'
+    },
+    {
+      id: '00000000-0000-0000-0000-000000002004',
+      doctor_id: 'c0000000-0000-0000-0000-000000000002', // Dr. Paravee
+      shift_date: getOffsetDate(1),
+      shift_type: 'IPD_ROUND',
+      department_id: 'd1111111-1111-1111-1111-111111111111',
+      start_time: '09:00',
+      end_time: '13:00',
+      status: 'SCHEDULED',
+      substitute_doctor_id: null,
+      notes: 'ตรวจเยี่ยมผู้ป่วยใน Ward 5 & ICU'
+    },
+    {
+      id: '00000000-0000-0000-0000-000000002005',
+      doctor_id: 'c0000000-0000-0000-0000-000000000002', // Dr. Paravee
+      shift_date: getOffsetDate(2),
+      shift_type: 'OPD_AFTERNOON',
+      department_id: 'd1111111-1111-1111-1111-111111111111',
+      start_time: '13:00',
+      end_time: '17:00',
+      status: 'SCHEDULED',
+      substitute_doctor_id: null,
+      notes: 'ตรวจผู้ป่วยนอกเฉพาะทางโรคหัวใจ'
+    },
+    {
+      id: '00000000-0000-0000-0000-000000002006',
+      doctor_id: 'c0000000-0000-0000-0000-000000000004', // Dr. Kantheera (PT)
+      shift_date: getOffsetDate(2),
+      shift_type: 'ON_CALL',
+      department_id: 'd1111111-1111-1111-1111-111111111111',
+      start_time: '08:00',
+      end_time: '20:00',
+      status: 'SCHEDULED',
+      substitute_doctor_id: null,
+      notes: 'แพทย์เวรให้คำปรึกษาทางโทรศัพท์'
+    }
+  ];
+
   return {
     departments,
     leave_types,
@@ -435,7 +515,8 @@ const getInitialSeedData = () => {
     audit_logs,
     holidays,
     tenure_rules,
-    tenure_settings
+    tenure_settings,
+    doctor_shifts
   };
 };
 
@@ -470,6 +551,7 @@ export const initStore = async () => {
   const seed = getInitialSeedData();
   if (!db.tenure_rules) db.tenure_rules = seed.tenure_rules;
   if (!db.tenure_settings) db.tenure_settings = seed.tenure_settings;
+  if (!db.doctor_shifts) db.doctor_shifts = seed.doctor_shifts;
   
   // Ensure all doctors have hire_date
   db.doctors.forEach(d => {

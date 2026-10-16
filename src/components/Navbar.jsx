@@ -13,7 +13,8 @@ import {
   X,
   CalendarDays,
   Award,
-  GitMerge
+  GitMerge,
+  CalendarRange
 } from 'lucide-react';
 import PersonaSwitcher from './PersonaSwitcher';
 import LineSimulatorModal from './LineSimulatorModal';
@@ -47,6 +48,7 @@ export default function Navbar() {
     { to: '/', label: 'ยื่นใบลา (LIFF)', icon: FileText, desc: 'Doctor LIFF', allowedRoles: ['DOCTOR', 'MEDICAL_ADMIN'] },
     { to: '/my-history', label: 'ประวัติการลา', icon: Clock, desc: 'My History', allowedRoles: ['DOCTOR'] },
     { to: '/approver', label: 'ศูนย์อนุมัติ', icon: CheckSquare, desc: 'Approver', allowedRoles: ['DEPT_HEAD', 'APPROVER'] },
+    { to: '/admin/shifts', label: 'ตารางเวรแพทย์', icon: CalendarRange, desc: 'Duty Schedule', allowedRoles: ['MEDICAL_ADMIN', 'ADMIN', 'DEPT_HEAD'] },
     { to: '/admin', label: 'ฝ่ายการแพทย์ (พี่กุ้ง)', icon: LayoutDashboard, desc: 'Admin', allowedRoles: ['MEDICAL_ADMIN', 'ADMIN'] },
     { to: '/admin/criteria', label: 'เกณฑ์โควตา', icon: Sliders, desc: 'Criteria', allowedRoles: ['MEDICAL_ADMIN', 'ADMIN'] },
     { to: '/admin/audit', label: 'Audit Log (PDPA)', icon: History, desc: 'Audit', allowedRoles: ['MEDICAL_ADMIN', 'ADMIN'] },

@@ -186,7 +186,7 @@ approver_id: 'c0000000-0000-0000-0000-000000000002',
 | 23 | จัดการวันหยุดนักขัตฤกษ์ (Public Holidays) | ✅ เสร็จ - หน้า UI จัดการวันหยุด รพ. ([AdminHolidaysPage.jsx](file:///d:/doctor-leave-line/src/pages/AdminHolidaysPage.jsx)), ปุ่ม Quick Seed วันหยุดราชการไทย, Duration Preview แบบเรียลไทม์ และผูกกับ Working Days Engine |
 | 24 | ตั้งค่าโครงสร้างผู้อนุมัติ (Line Approve) | ✅ เสร็จ - หน้า UI จัดการสายอนุมัติรายบุคคล และปุ่ม Batch Assign ผู้อนุมัติตามแผนก ([AdminMasterDataPage.jsx](file:///d:/doctor-leave-line/src/pages/AdminMasterDataPage.jsx)) |
 | 25 | จัดการรูปแบบการลา (Leave Types) | ✅ เสร็จ - หน้า UI เพิ่ม/แก้ไข/ปิดใช้งานประเภทการลา, กำหนดเงื่อนไขวันแจ้งล่วงหน้า, การบังคับแนบเอกสาร และการลาย้อนหลัง |
-| 26 | ระบบจัดการตารางเวร (Shift & Schedule) | ระบบจัดตารางเวร (Consult, ER, Night Duty) และซิงก์ข้อมูลวันที่ลาไม่ให้ชนกับวันเข้าเวร |
+| 26 | ระบบจัดการตารางเวร (Shift & Schedule) | ✅ เสร็จ - ระบบจัดตารางเวร ([AdminShiftsPage.jsx](file:///d:/doctor-leave-line/src/pages/AdminShiftsPage.jsx)), ตรวจจับวันลาชนเวรแบบเรียลไทม์ (Duty Collision Check), กำหนดแพทย์ผู้รับเวรแทน (Substitute/Handover Doctor), ขอแลกเวร (Shift Swap), และปุ่มสร้างตารางเวรหมุนเวียนอัตโนมัติ |
 
 ---
 
@@ -209,7 +209,7 @@ graph TD
     B --> B2["8. Cancel Notification (Done)"]
     B --> B3["9. Overlap / Duplicate Check (Done)"]
     B --> B4["10. Supabase Integration (Done)"]
-    B --> B5["13. Bandwidth Optimization"]
+    B --> B5["13. Bandwidth Optimization (Done)"]
     B --> B6["14. LINE Quota Fallback (Done)"]
     
     C --> C1["11. Deployment Config (Ready)"]
@@ -221,7 +221,7 @@ graph TD
     D --> D2["23. Holidays Management UI & Engine (Done)"]
     D --> D3["24. Approver Hierarchy (Done)"]
     D --> D4["25. Leave Types Management (Done)"]
-    D --> D5["26. Shift Schedule Management"]
+    D --> D5["26. Shift Schedule Management (Done)"]
 ```
 
 ---
@@ -231,9 +231,10 @@ graph TD
 | หมวด | เสร็จ | เหลือ |
 |------|-------|-------|
 | **Database Schema** | ✅ 100% | — |
-| **Backend API** | ✅ 100% | Validation, Reminders, Cancel Notification, Overlap Check, Quota Fallback, Holidays CRUD, Tenure Engine, Approver Routes & Leave Types CRUD |
-| **LINE Flex Messages** | ✅ 100% | รองรับครบถ้วน และแก้ปัญหา opacity 400 Bad Request แล้ว |
-| **Frontend Pages** | ✅ 100% | Calendar View, Holidays Management, Tenure Engine, Master Data Portal และหน้าจอครบถ้วนตาม PRD |
+| **Backend API** | ✅ 100% | ครบถ้วนทุกโมดูล (Validation, Reminders, Quota, Holidays, Tenure, Hierarchy, Leave Types, Shifts CRUD & Collision Check) |
+| **LINE Flex Messages** | ✅ 100% | รองรับครบถ้วน แสดงข้อมูลแพทย์รับเวรแทน และแก้ปัญหา opacity 400 Bad Request แล้ว |
+| **Frontend Pages** | ✅ 100% | Dashboard, Calendar, Holidays, Tenure, Master Data, Shift Schedule Matrix และ Doctor LIFF ครบถ้วนตาม PRD |
+| **Shift & Schedule Engine** | ✅ 100% | จัดตารางเวร OPD, ER, Night, On-Call, ตรวจจับวันลาชนเวร, ระบุแพทย์รับเวรแทน, แลกเวร, Auto Roster Generator |
 | **Approver Hierarchy** | ✅ 100% | กำหนดสายอนุมัติรายบุคคล (Step 1-2) และปุ่ม Quick Assign ตามแผนก |
 | **Leave Types Policy** | ✅ 100% | CRUD รูปแบบการลา, กำหนดวันแจ้งล่วงหน้า, การแนบเอกสาร, สิทธิ์ Full-Time only |
 | **Tenure & Prorate Engine** | ✅ 100% | คำนวณสิทธิ์พักร้อนตามอายุงาน, Prorate ปีแรก, ยกยอดข้ามปี (Carry-over), Batch Apply |

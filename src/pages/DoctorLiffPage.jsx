@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 export default function DoctorLiffPage() {
-  const { currentDoctor, refreshDoctors } = useAuth();
+  const { currentDoctor, doctors, refreshDoctors } = useAuth();
 
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [balances, setBalances] = useState([]);
@@ -32,6 +32,11 @@ export default function DoctorLiffPage() {
   const [reason, setReason] = useState('');
   const [uploadLater, setUploadLater] = useState(false);
   const [files, setFiles] = useState([]);
+
+  // Shift Conflict & Duty Handover State (Feature #26)
+  const [shiftConflict, setShiftConflict] = useState(null);
+  const [substituteDoctorId, setSubstituteDoctorId] = useState('');
+  const [dutyHandoverNotes, setDutyHandoverNotes] = useState('');
 
   // Quota Status & Duration Preview
   const [quotaInfo, setQuotaInfo] = useState(null);
@@ -126,6 +131,30 @@ export default function DoctorLiffPage() {
     calc();
   }, [startDate, endDate, halfDayType, selectedType]);
 
+  // Live Shift Conflict Check (Feature #26)
+  useEffect(() => {
+    if (!currentDoctor || !startDate) return;
+    const finalEnd = halfDayType !== 'FULL_DAY' ? startDate : (endDate || startDate);
+
+    const checkShifts = async () => {
+      try {
+        const res = await fetch(`/api/shifts/check-conflict?doctor_id=${currentDoctor.id}&start_date=${startDate}&end_date=${finalEnd}&half_day_type=${halfDayType}`);
+        if (res.ok) {
+          const data = await res.json();
+          setShiftConflict(data);
+        }
+      } catch (err) {
+        console.error('Shift conflict check error:', err);
+      }
+    };
+    checkShifts();
+  }, [currentDoctor, startDate, endDate, halfDayType]);
+
+  // Department Colleagues for Handover
+  const departmentColleagues = (doctors || []).filter(
+    d => d.id !== currentDoctor?.id && d.department_id === currentDoctor?.department_id && d.is_active
+  );
+
   // Handle Form Submission
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -135,6 +164,10 @@ export default function DoctorLiffPage() {
     }
     if (!reason.trim()) {
       setErrorMessage('กรุณาระบุเหตุผลการลา');
+      return;
+    }
+    if (shiftConflict?.requires_substitute && !substituteDoctorId) {
+      setErrorMessage('คำขอนี้ชนกับเวรสำคัญ (ER / Night Duty) กรุณาระบุแพทย์ผู้ปฏิบัติหน้าที่แทน');
       return;
     }
 
@@ -150,6 +183,12 @@ export default function DoctorLiffPage() {
       formData.append('half_day_type', halfDayType);
       formData.append('reason', reason);
       formData.append('upload_later', uploadLater ? 'true' : 'false');
+      if (substituteDoctorId) {
+        formData.append('substitute_doctor_id', substituteDoctorId);
+      }
+      if (dutyHandoverNotes) {
+        formData.append('duty_handover_notes', dutyHandoverNotes);
+      }
 
       if (files && files.length > 0) {
         for (let i = 0; i < files.length; i++) {
@@ -190,6 +229,8 @@ export default function DoctorLiffPage() {
       setReason('');
       setFiles([]);
       setUploadLater(false);
+      setSubstituteDoctorId('');
+      setDutyHandoverNotes('');
     } catch (err) {
       setErrorMessage(err.message);
     } finally {
@@ -539,6 +580,66 @@ export default function DoctorLiffPage() {
           {quotaInfo?.status === 'FULL' && (
             <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800">
               💡 <strong>คำขอข้อยกเว้นพิเศษ:</strong> โควตาวันนี้เต็มแล้ว หากท่านจำเป็นต้องลาจริง ๆ สามารถส่งคำขอได้ ระบบจะส่งเตือนพี่กุ้งและหัวหน้าแผนกเป็นกรณีเร่งด่วนพิเศษ
+            </div>
+          )}
+
+          {/* Shift Collision Alert & Substitute Doctor Handover (Feature #26) */}
+          {shiftConflict && shiftConflict.has_conflict && (
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50/60 border border-amber-300 rounded-2xl p-3.5 shadow-sm space-y-3">
+              <div className="flex items-start gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1 flex-wrap">
+                    <h4 className="text-xs font-bold text-amber-950">
+                      ตรวจพบตารางเวรตรงกับวันลา ({shiftConflict.conflict_count} รายการ)
+                    </h4>
+                    {shiftConflict.requires_substitute && (
+                      <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-rose-200 shrink-0">
+                        ต้องระบุผู้รับเวรแทน
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-2 space-y-1.5">
+                    {shiftConflict.conflicts.map((conf, idx) => (
+                      <div key={idx} className="flex items-center justify-between bg-white/90 rounded-lg px-2.5 py-1.5 text-[11px] border border-amber-200/80">
+                        <span className="font-semibold text-slate-800">
+                          📅 {conf.shift_date} • <span className="text-amber-800 font-bold">{conf.shift_label}</span> ({conf.time})
+                        </span>
+                        <span className="text-[10px] text-slate-500">{conf.notes || 'เวรประจำ'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Handover & Substitute Doctor Picker */}
+              <div className="pt-2 border-t border-amber-200/80 space-y-2">
+                <label className="block text-xs font-bold text-slate-800">
+                  👨‍⚕️ แพทย์ผู้ปฏิบัติหน้าที่แทน (Substitute Doctor) {shiftConflict.requires_substitute && <span className="text-rose-500">*</span>}
+                </label>
+                <select
+                  value={substituteDoctorId}
+                  onChange={(e) => setSubstituteDoctorId(e.target.value)}
+                  className="w-full text-xs font-medium border border-amber-300 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-[#006699] outline-hidden"
+                >
+                  <option value="">-- เลือกแพทย์ผู้รับเวรแทนในแผนก --</option>
+                  {departmentColleagues.map((colleague) => (
+                    <option key={colleague.id} value={colleague.id}>
+                      {colleague.prefix_th}{colleague.first_name_th} {colleague.last_name_th} ({colleague.doctor_type === 'FULL_TIME' ? 'แพทย์ประจำ' : 'พาร์ทไทม์'})
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  type="text"
+                  placeholder="บันทึกส่งมอบเวร / ข้อมูลเคสคนไข้สำคัญ (Handover Notes)"
+                  value={dutyHandoverNotes}
+                  onChange={(e) => setDutyHandoverNotes(e.target.value)}
+                  className="w-full text-xs border border-amber-200 rounded-xl px-3 py-2 bg-white text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-[#006699] outline-hidden"
+                />
+              </div>
             </div>
           )}
 
