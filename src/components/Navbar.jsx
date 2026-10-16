@@ -86,27 +86,22 @@ export default function Navbar() {
             
             {/* Official Hospital Brand Logo & Name */}
             <Link to="/" className="flex items-center gap-3 shrink-0 group">
-              <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center p-1.5 relative overflow-hidden transition-transform group-hover:scale-105">
-                {/* Authentic BDMS Red/Blue Medical Cross Emblem */}
-                <div className="w-full h-full relative flex items-center justify-center">
-                  <span className="absolute w-2.5 h-7 bg-[#dc2626] rounded-xs shadow-xs" />
-                  <span className="absolute w-7 h-2.5 bg-[#006699] rounded-xs shadow-xs" />
-                </div>
-              </div>
-              <div>
+              <img 
+                src="/official_bsi_logo.svg" 
+                alt="Bangkok Hospital Siriroj" 
+                className="h-10 w-auto object-contain transition-transform group-hover:scale-102" 
+              />
+              <div className="border-l border-slate-200 pl-3 hidden sm:block">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-extrabold text-[#006699] text-base leading-tight tracking-tight">
-                    BANGKOK HOSPITAL
+                  <span className="font-bold text-slate-800 text-sm leading-tight">
+                    Doctor Leave Portal
                   </span>
-                  <span className="font-extrabold text-[#dc2626] text-base leading-tight tracking-tight">
-                    SIRIROJ
-                  </span>
-                  <span className="bg-sky-100 text-[#006699] text-[10px] font-bold px-1.5 py-0.2 rounded-full border border-sky-200">
+                  <span className="bg-sky-100 text-[#002d74] text-[10px] font-bold px-1.5 py-0.2 rounded-full border border-sky-200">
                     BSI
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-500 font-medium hidden sm:block">
-                  Doctor Leave @ LINE • โรงพยาบาลกรุงเทพสิริโรจน์
+                <p className="text-[11px] text-slate-500 font-medium">
+                  ระบบบริหารการลาแพทย์ • โรงพยาบาลกรุงเทพศิริโรจน์
                 </p>
               </div>
             </Link>

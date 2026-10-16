@@ -9,60 +9,66 @@ const rootDir = path.join(__dirname, '..');
 
 const SIZE = 1000;
 
-// Official Bangkok Hospital Siriroj Avatar / Profile Picture (BDMS Identity)
-const avatarSvg = `
-<svg width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" />
-      <stop offset="100%" stop-color="#f8fafc" />
-    </linearGradient>
-
-    <filter id="logo-shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="16" stdDeviation="30" flood-color="#006699" flood-opacity="0.12" />
-    </filter>
-  </defs>
-
-  <!-- Circular Base -->
-  <rect width="${SIZE}" height="${SIZE}" fill="url(#bg-grad)" />
-
-  <!-- Subtle Hospital Blue Ring -->
-  <circle cx="500" cy="500" r="470" fill="none" stroke="#006699" stroke-width="12" stroke-opacity="0.15" />
-  <circle cx="500" cy="500" r="450" fill="none" stroke="#006699" stroke-width="4" stroke-opacity="0.25" />
-
-  <!-- Center Emblem (BDMS Medical Emblem) -->
-  <g transform="translate(500, 390)" filter="url(#logo-shadow)">
-    <!-- Shield / Badge Background -->
-    <rect x="-160" y="-160" width="320" height="320" rx="64" fill="#ffffff" stroke="#e2e8f0" stroke-width="6" />
-    
-    <!-- Red Cross Vertical -->
-    <rect x="-35" y="-115" width="70" height="230" rx="16" fill="#dc2626" />
-    <!-- Blue Cross Horizontal -->
-    <rect x="-115" y="-35" width="230" height="70" rx="16" fill="#006699" />
-  </g>
-
-  <!-- Typography: BANGKOK HOSPITAL SIRIROJ -->
-  <text x="500" y="660" text-anchor="middle" font-family="'Sarabun', 'Arial', sans-serif" font-size="52" font-weight="900" fill="#006699" letter-spacing="4">
-    BANGKOK HOSPITAL
-  </text>
-  <text x="500" y="730" text-anchor="middle" font-family="'Sarabun', 'Arial', sans-serif" font-size="46" font-weight="800" fill="#dc2626" letter-spacing="6">
-    SIRIROJ
-  </text>
-  <text x="500" y="800" text-anchor="middle" font-family="'Sarabun', 'Noto Sans Thai', sans-serif" font-size="34" font-weight="600" fill="#64748b" letter-spacing="2">
-    ระบบลาแพทย์ • DOCTOR LEAVE
-  </text>
-</svg>
-`;
-
 async function generate() {
-  console.log(`🎨 Rendering Official LINE OA Profile Avatar (${SIZE}x${SIZE}px)...`);
+  console.log(`🎨 Rendering Official LINE OA Profile Avatar (${SIZE}x${SIZE}px) with REAL BSI Vector Logo...`);
   const destPath = path.join(rootDir, 'public', 'bsi_profile.png');
-  
-  await sharp(Buffer.from(avatarSvg))
-    .png({ quality: 100 })
-    .toFile(destPath);
+  const svgPath = path.join(rootDir, 'public', 'official_bsi_logo.svg');
 
-  console.log(`✅ Saved high-res profile avatar to: ${destPath}`);
+  if (!fs.existsSync(svgPath)) {
+    console.error(`❌ Official logo SVG not found at ${svgPath}`);
+    return;
+  }
+
+  // 1. Render the authentic official logo into PNG at 820px width
+  const svgBuffer = fs.readFileSync(svgPath);
+  const logoPng = await sharp(svgBuffer)
+    .resize(800)
+    .png()
+    .toBuffer();
+
+  const logoMeta = await sharp(logoPng).metadata();
+
+  // 2. Hospital Ring & Badging SVG overlay
+  const badgeSvg = `
+  <svg width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Clean white circular background -->
+    <circle cx="500" cy="500" r="498" fill="#ffffff" />
+    
+    <!-- Authentic Hospital Navy Outer Ring -->
+    <circle cx="500" cy="500" r="486" fill="none" stroke="#002d74" stroke-width="12" stroke-opacity="0.1" />
+    <circle cx="500" cy="500" r="472" fill="none" stroke="#002d74" stroke-width="4" stroke-opacity="0.75" />
+
+    <!-- Subtitle Badge at bottom -->
+    <g transform="translate(500, 780)">
+      <rect x="-240" y="-30" width="480" height="60" rx="30" fill="#002d74" />
+      <text x="0" y="10" text-anchor="middle" font-family="'Sarabun', 'Arial', sans-serif" font-size="28" font-weight="bold" fill="#ffffff" letter-spacing="2">
+        DOCTOR LEAVE SYSTEM
+      </text>
+    </g>
+  </svg>
+  `;
+
+  // 3. Composite everything cleanly
+  await sharp({
+    create: {
+      width: SIZE,
+      height: SIZE,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 }
+    }
+  })
+  .composite([
+    { input: Buffer.from(badgeSvg), left: 0, top: 0 },
+    {
+      input: logoPng,
+      left: Math.round((SIZE - logoMeta.width) / 2),
+      top: Math.round((SIZE - logoMeta.height) / 2) - 40 // Centered slightly higher to balance badge
+    }
+  ])
+  .png()
+  .toFile(destPath);
+
+  console.log(`✅ Official Profile Image successfully generated at: ${destPath}`);
 }
 
 generate().catch(console.error);

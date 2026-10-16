@@ -13,11 +13,13 @@ import {
 } from '../db.js';
 import {
   sendLinePushMessage,
+  sendLineReplyMessage,
   buildDoctorSubmittedFlex,
   buildApproverRequestFlex,
   buildLeaveDecisionFlex,
   buildEmergencyAlertFlex,
   buildCancelAlertFlex,
+  buildWelcomeFlex,
   simulatedLineMessages,
   isLineConfigured
 } from '../line.js';
@@ -1312,6 +1314,39 @@ router.post('/line/webhook', async (req, res) => {
     const db = getDb();
 
     for (const event of events) {
+      // 1. Follow Event (Doctor adds bot as friend or unblocks)
+      if (event.type === 'follow') {
+        const lineUserId = event.source && event.source.userId;
+        let doc = null;
+        if (lineUserId) {
+          doc = db.doctors.find(d => d.line_user_id === lineUserId);
+        }
+        const docName = doc ? `${doc.prefix_th}${doc.first_name_th} ${doc.last_name_th}` : '';
+        const welcomeFlex = buildWelcomeFlex(docName);
+        if (event.replyToken) {
+          await sendLineReplyMessage(event.replyToken, welcomeFlex);
+        } else if (lineUserId) {
+          await sendLinePushMessage(lineUserId, welcomeFlex);
+        }
+      }
+
+      // 2. Text Message Event (Doctor types keyword)
+      if (event.type === 'message' && event.message && event.message.type === 'text') {
+        const text = (event.message.text || '').trim();
+        if (text.includes('ลา') || text.includes('เมนู') || text.includes('สวัสดี') || text.includes('help') || text.includes('ติดต่อ') || text.includes('กุ้ง')) {
+          const lineUserId = event.source && event.source.userId;
+          let doc = null;
+          if (lineUserId) {
+            doc = db.doctors.find(d => d.line_user_id === lineUserId);
+          }
+          const docName = doc ? `${doc.prefix_th}${doc.first_name_th} ${doc.last_name_th}` : '';
+          const welcomeFlex = buildWelcomeFlex(docName);
+          if (event.replyToken) {
+            await sendLineReplyMessage(event.replyToken, welcomeFlex);
+          }
+        }
+      }
+
       if (event.type === 'postback') {
         const params = new URLSearchParams(event.postback.data);
         const action = params.get('action');

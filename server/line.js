@@ -65,6 +65,44 @@ export async function sendLinePushMessage(toLineUserId, messages) {
 }
 
 /**
+ * Reply to LINE user using replyToken (Free - zero quota usage)
+ */
+export async function sendLineReplyMessage(replyToken, messages) {
+  if (!replyToken) return { success: false, error: 'No replyToken' };
+
+  const payload = {
+    replyToken,
+    messages: Array.isArray(messages) ? messages : [messages]
+  };
+
+  if (!isLineConfigured) {
+    console.log(`[LINE SIMULATOR] 📱 Reply Message:`, JSON.stringify(messages, null, 2));
+    return { success: true, simulated: true };
+  }
+
+  try {
+    const res = await fetch('https://api.line.me/v2/bot/message/reply', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error('[LINE Reply API Error]', res.status, data);
+      return { success: false, error: data };
+    }
+    return { success: true, data };
+  } catch (err) {
+    console.error('[LINE Reply Network Error]', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
  * 1. Flex Message: แจ้งแพทย์เมื่อยื่นใบลาสำเร็จ (1-on-1 Doctor Submission Confirmation)
  */
 export function buildDoctorSubmittedFlex(request, doctor, leaveType) {
@@ -684,3 +722,100 @@ export function buildCancelAlertFlex(request, doc, leaveType) {
     }
   ];
 }
+
+/**
+ * Welcome / Greeting Flex Message when doctor adds friend or opens chat
+ */
+export function buildWelcomeFlex(doctorName = '') {
+  return {
+    type: 'flex',
+    altText: 'ยินดีต้อนรับสู่ระบบ Doctor Leave @ LINE โรงพยาบาลกรุงเทพศิริโรจน์',
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#002d74',
+        paddingAll: '18px',
+        contents: [
+          {
+            type: 'text',
+            text: 'BANGKOK HOSPITAL SIRIROJ',
+            color: '#93c5fd',
+            size: 'xs',
+            weight: 'bold',
+            letterSpacing: '1px'
+          },
+          {
+            type: 'text',
+            text: '🩺 ยินดีต้อนรับสู่ระบบลาแพทย์ BSI',
+            color: '#ffffff',
+            size: 'md',
+            weight: 'bold',
+            margin: 'xs'
+          }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'md',
+        paddingAll: '18px',
+        contents: [
+          {
+            type: 'text',
+            text: `สวัสดีครับ/ค่ะ ${doctorName ? doctorName : 'คุณหมอ'}`,
+            weight: 'bold',
+            size: 'md',
+            color: '#0f172a'
+          },
+          {
+            type: 'text',
+            text: 'ยินดีต้อนรับสู่ระบบ Doctor Leave @ LINE โรงพยาบาลกรุงเทพศิริโรจน์ คุณหมอสามารถแตะเมนูด้านล่างเพื่อทำรายการได้ทันทีครับ',
+            size: 'sm',
+            color: '#475569',
+            wrap: true
+          },
+          {
+            type: 'separator',
+            margin: 'md'
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            spacing: 'sm',
+            margin: 'md',
+            contents: [
+              {
+                type: 'text',
+                text: '• ยื่นใบลาแพทย์ (ลาพักผ่อน, ป่วย, กิจ, ประชุมวิชาการ)',
+                size: 'xs',
+                color: '#64748b'
+              },
+              {
+                type: 'text',
+                text: '• ตรวจสอบสิทธิ์คงเหลือ & ประวัติการอนุมัติ',
+                size: 'xs',
+                color: '#64748b'
+              },
+              {
+                type: 'text',
+                text: '• ตรวจสอบตารางเวรออกตรวจแพทย์',
+                size: 'xs',
+                color: '#64748b'
+              },
+              {
+                type: 'text',
+                text: '• ติดต่อฝ่ายการแพทย์ (พี่กุ้ง) ฉุกเฉิน: 076-361-888',
+                size: 'xs',
+                color: '#64748b'
+              }
+            ]
+          }
+        ]
+      }
+    }
+  };
+}
+
