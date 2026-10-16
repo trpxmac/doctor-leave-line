@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, X, Trash2, RefreshCw, Send, CheckCircle2, Phone, AlertTriangle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { MessageSquare, X, Trash2, RefreshCw, Send, CheckCircle2, Phone, AlertTriangle, LayoutDashboard, XCircle, ExternalLink } from 'lucide-react';
 
 export default function LineSimulatorModal({ isOpen, onClose }) {
+  const navigate = useNavigate();
+  const { doctors, switchDoctor } = useAuth();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('ALL'); // 'ALL' or specific user ID
@@ -55,6 +59,35 @@ export default function LineSimulatorModal({ isOpen, onClose }) {
       return () => clearInterval(interval);
     }
   }, [isOpen]);
+
+  const handleUriNavigation = (uri) => {
+    if (!uri) return;
+    onClose();
+    try {
+      let targetPath = uri;
+      if (uri.startsWith('http')) {
+        const parsed = new URL(uri);
+        if (parsed.hostname === 'liff.line.me') {
+          const segments = parsed.pathname.split('/').filter(Boolean);
+          targetPath = '/' + segments.slice(1).join('/') + parsed.search;
+        } else {
+          targetPath = parsed.pathname + parsed.search;
+        }
+      }
+
+      if (targetPath.startsWith('/admin')) {
+        const adminDoc = doctors.find(d => (d.roles || []).includes('ADMIN') || (d.roles || []).includes('MEDICAL_ADMIN'));
+        if (adminDoc) switchDoctor(adminDoc.id);
+      } else if (targetPath.startsWith('/approver')) {
+        const approverDoc = doctors.find(d => (d.roles || []).includes('APPROVER') || (d.roles || []).includes('DEPT_HEAD'));
+        if (approverDoc) switchDoctor(approverDoc.id);
+      }
+
+      navigate(targetPath);
+    } catch (e) {
+      window.location.href = uri;
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -205,13 +238,14 @@ export default function LineSimulatorModal({ isOpen, onClose }) {
                             const isApprove = action?.data?.includes('action=approve');
                             const isReject = action?.uri?.includes('reject');
                             const isPhone = action?.uri?.startsWith('tel:');
+                            const isDashboard = action?.uri?.includes('/admin') || (action?.label && action.label.includes('Dashboard'));
 
                             if (isApprove) {
                               return (
                                 <button
                                   key={bIdx}
                                   onClick={() => handlePostback(action.data)}
-                                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 active:scale-98"
+                                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 active:scale-98 cursor-pointer"
                                 >
                                   <CheckCircle2 className="w-3.5 h-3.5" />
                                   {action.label}
@@ -224,11 +258,50 @@ export default function LineSimulatorModal({ isOpen, onClose }) {
                                 <a
                                   key={bIdx}
                                   href={action.uri}
-                                  className="w-full py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 text-center"
+                                  className="w-full py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 text-center cursor-pointer"
                                 >
                                   <Phone className="w-3.5 h-3.5" />
                                   {action.label}
                                 </a>
+                              );
+                            }
+
+                            if (isReject) {
+                              return (
+                                <button
+                                  key={bIdx}
+                                  onClick={() => handleUriNavigation(action.uri)}
+                                  className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 active:scale-98 cursor-pointer"
+                                >
+                                  <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                                  {action.label}
+                                </button>
+                              );
+                            }
+
+                            if (isDashboard) {
+                              return (
+                                <button
+                                  key={bIdx}
+                                  onClick={() => handleUriNavigation(action.uri)}
+                                  className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 active:scale-98 cursor-pointer"
+                                >
+                                  <LayoutDashboard className="w-3.5 h-3.5 text-sky-400" />
+                                  {action.label}
+                                </button>
+                              );
+                            }
+
+                            if (action?.uri) {
+                              return (
+                                <button
+                                  key={bIdx}
+                                  onClick={() => handleUriNavigation(action.uri)}
+                                  className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold transition-all shadow-sm flex items-center justify-center gap-1.5 active:scale-98 cursor-pointer"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                                  {action.label}
+                                </button>
                               );
                             }
 
