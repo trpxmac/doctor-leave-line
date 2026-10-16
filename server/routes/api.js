@@ -73,6 +73,17 @@ const upload = multer({
   }
 });
 
+export const defaultContactSettings = {
+  department_name: 'ฝ่ายการแพทย์ (Medical Affairs)',
+  coordinator_name: 'คุณสิริมาศ',
+  phone_emergency: '076-361-888',
+  phone_ext: '1234',
+  phone_hotline: '081-999-8888',
+  email: 'medical_affairs@bsi.hospital',
+  location: 'อาคาร A ชั้น 3 ฝ่ายการแพทย์ โรงพยาบาลกรุงเทพศิริโรจน์',
+  notify_line: true
+};
+
 // Middleware that conditionally applies multer only when Content-Type is multipart/form-data
 const handleUpload = (req, res, next) => {
   if (req.is('multipart/form-data')) {
@@ -1492,9 +1503,11 @@ router.post('/line/webhook', async (req, res) => {
           text.includes('เบอร์') ||
           text.includes('โทร')
         ) {
-          const contactFlex = buildContactCardFlex(db.contact_settings || defaultContact);
+          const contactFlex = buildContactCardFlex(db.contact_settings || defaultContactSettings);
           if (event.replyToken) {
             await sendLineReplyMessage(event.replyToken, contactFlex);
+          } else if (lineUserId) {
+            await sendLinePushMessage(lineUserId, contactFlex);
           }
         }
         // B. Welcome / Leave Menu Card
@@ -2790,6 +2803,30 @@ router.post('/shifts/batch-monthly', (req, res) => {
     message: `สร้างตารางเวรประจำเดือน ${padMonth}/${numYear} เรียบร้อยแล้ว (${createdCount} รายการ)`,
     created_count: createdCount
   });
+});
+
+// -------------------------------------------------------------
+// SETTINGS: MEDICAL AFFAIRS CONTACT & EMERGENCY
+// -------------------------------------------------------------
+router.get('/settings/contact', (req, res) => {
+  const db = getDb();
+  res.json(db.contact_settings || defaultContactSettings);
+});
+
+router.put('/settings/contact', (req, res) => {
+  try {
+    const db = getDb();
+    db.contact_settings = {
+      ...(db.contact_settings || defaultContactSettings),
+      ...req.body,
+      updated_at: new Date().toISOString()
+    };
+    saveStore();
+    res.json({ message: 'บันทึกข้อมูลติดต่อฝ่ายการแพทย์เรียบร้อย', contact_settings: db.contact_settings });
+  } catch (err) {
+    console.error('Error saving contact settings:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;
