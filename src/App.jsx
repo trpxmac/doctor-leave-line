@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import DoctorLiffPage from './pages/DoctorLiffPage';
@@ -14,6 +14,36 @@ import AdminMasterDataPage from './pages/AdminMasterDataPage';
 import AdminShiftsPage from './pages/AdminShiftsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import OnboardingPage from './pages/OnboardingPage';
+
+// Intercepts LINE LIFF subpath/query routing (?liff.state=... or ?route=...)
+function LiffRedirectHandler() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const liffState = searchParams.get('liff.state');
+      const routeParam = searchParams.get('route') || searchParams.get('path');
+      
+      let targetPath = null;
+      if (liffState) {
+        targetPath = decodeURIComponent(liffState);
+      } else if (routeParam) {
+        targetPath = decodeURIComponent(routeParam);
+      }
+
+      if (targetPath && targetPath !== location.pathname) {
+        console.log(`[LIFF Navigation] Redirecting to target path: ${targetPath}`);
+        navigate(targetPath, { replace: true });
+      }
+    } catch (e) {
+      console.warn('[LIFF Navigation Error]', e);
+    }
+  }, [location.pathname, navigate]);
+
+  return null;
+}
 
 export default function App() {
   return (
@@ -32,17 +62,18 @@ function AppContent() {
 
   return (
       <BrowserRouter>
+        <LiffRedirectHandler />
         <div className="min-h-screen flex flex-col bg-slate-100">
           <Navbar />
           <main className="flex-1 pb-12">
             <Routes>
               <Route path="/" element={
-                <ProtectedRoute allowedRoles={['DOCTOR', 'MEDICAL_ADMIN']}>
+                <ProtectedRoute allowedRoles={['DOCTOR', 'MEDICAL_ADMIN', 'ADMIN', 'APPROVER', 'DEPT_HEAD']}>
                   <DoctorLiffPage />
                 </ProtectedRoute>
               } />
               <Route path="/my-history" element={
-                <ProtectedRoute allowedRoles={['DOCTOR']}>
+                <ProtectedRoute allowedRoles={['DOCTOR', 'MEDICAL_ADMIN', 'ADMIN', 'APPROVER', 'DEPT_HEAD']}>
                   <DoctorHistoryPage />
                 </ProtectedRoute>
               } />

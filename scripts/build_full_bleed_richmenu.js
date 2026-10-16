@@ -14,59 +14,76 @@ async function buildFullBleedOldStyle() {
   const HALF_W = 1250;
   const HALF_H = 843;
 
-  // In each card in src, inner content is within ~20px inset from edges:
-  // Q1: left: 325, top: 121, width: 286, height: 288
-  // Q2: left: 651, top: 121, width: 285, height: 288
-  // Q3: left: 325, top: 449, width: 286, height: 288
-  // Q4: left: 651, top: 449, width: 285, height: 288
+  // Exact coordinates of the 4 full cards (preserving all text, including 'ย์' in ตารางเวรแพทย์):
+  // Q1 Blue: 308, 101, 331, 338
+  // Q2 Cyan: 625, 101, 330, 338
+  // Q3 Green: 308, 420, 331, 338
+  // Q4 Red: 625, 420, 330, 338
 
-  // We resize the content to 700x700 with Lanczos3
-  const targetSize = 700;
+  async function extractAndClean(rect, bgColor, outerCorner) {
+    const { data, info } = await sharp(src)
+      .extract(rect)
+      .raw()
+      .toBuffer({ resolveWithObject: true });
 
-  const q1Content = await sharp(src)
-    .extract({ left: 325, top: 121, width: 286, height: 288 })
-    .resize(targetSize, targetSize, { kernel: 'lanczos3' })
-    .toBuffer();
+    // Clean outer corners of gray pixels without touching any text or icons
+    for (let y = 0; y < info.height; y++) {
+      for (let x = 0; x < info.width; x++) {
+        const isNearOuterCorner = 
+          (outerCorner === 'top-left' && x < 28 && y < 28) ||
+          (outerCorner === 'top-right' && x > info.width - 28 && y < 28) ||
+          (outerCorner === 'bottom-left' && x < 28 && y > info.height - 28) ||
+          (outerCorner === 'bottom-right' && x > info.width - 28 && y > info.height - 28);
 
-  const q2Content = await sharp(src)
-    .extract({ left: 651, top: 121, width: 285, height: 288 })
-    .resize(targetSize, targetSize, { kernel: 'lanczos3' })
-    .toBuffer();
+        if (isNearOuterCorner) {
+          const idx = (y * info.width + x) * 3;
+          const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+          const isGray = (Math.abs(r - g) < 22 && Math.abs(g - b) < 22 && Math.abs(r - b) < 22 && r > 190);
+          if (isGray) {
+            data[idx] = bgColor.r;
+            data[idx + 1] = bgColor.g;
+            data[idx + 2] = bgColor.b;
+          }
+        }
+      }
+    }
 
-  const q3Content = await sharp(src)
-    .extract({ left: 325, top: 449, width: 286, height: 288 })
-    .resize(targetSize, targetSize, { kernel: 'lanczos3' })
-    .toBuffer();
+    // Resize cleanly to fit proportionally in 1250 x 843
+    // Target height ~740px (width will be ~725px), giving generous padding and 0 cutoff
+    return await sharp(data, { raw: info })
+      .resize({ height: 750, fit: 'contain', kernel: 'lanczos3' })
+      .toBuffer({ resolveWithObject: true });
+  }
 
-  const q4Content = await sharp(src)
-    .extract({ left: 651, top: 449, width: 285, height: 288 })
-    .resize(targetSize, targetSize, { kernel: 'lanczos3' })
-    .toBuffer();
+  const q1 = await extractAndClean({ left: 308, top: 101, width: 331, height: 338 }, { r: 21, g: 97, b: 195 }, 'top-left');
+  const q2 = await extractAndClean({ left: 625, top: 101, width: 330, height: 338 }, { r: 24, g: 168, b: 218 }, 'top-right');
+  const q3 = await extractAndClean({ left: 308, top: 420, width: 331, height: 338 }, { r: 7, g: 174, b: 122 }, 'bottom-left');
+  const q4 = await extractAndClean({ left: 625, top: 420, width: 330, height: 338 }, { r: 244, g: 91, b: 83 }, 'bottom-right');
 
   // Create solid background quadrants matching the exact RGB colors
   const q1Bg = await sharp({ create: { width: HALF_W, height: HALF_H, channels: 3, background: { r: 21, g: 97, b: 195 } } })
-    .composite([{ input: q1Content, top: Math.round((HALF_H - targetSize) / 2), left: Math.round((HALF_W - targetSize) / 2) }])
+    .composite([{ input: q1.data, raw: q1.info, top: Math.round((HALF_H - q1.info.height) / 2), left: Math.round((HALF_W - q1.info.width) / 2) }])
     .png()
     .toBuffer();
 
   const q2Bg = await sharp({ create: { width: HALF_W, height: HALF_H, channels: 3, background: { r: 24, g: 168, b: 218 } } })
-    .composite([{ input: q2Content, top: Math.round((HALF_H - targetSize) / 2), left: Math.round((HALF_W - targetSize) / 2) }])
+    .composite([{ input: q2.data, raw: q2.info, top: Math.round((HALF_H - q2.info.height) / 2), left: Math.round((HALF_W - q2.info.width) / 2) }])
     .png()
     .toBuffer();
 
   const q3Bg = await sharp({ create: { width: HALF_W, height: HALF_H, channels: 3, background: { r: 7, g: 174, b: 122 } } })
-    .composite([{ input: q3Content, top: Math.round((HALF_H - targetSize) / 2), left: Math.round((HALF_W - targetSize) / 2) }])
+    .composite([{ input: q3.data, raw: q3.info, top: Math.round((HALF_H - q3.info.height) / 2), left: Math.round((HALF_W - q3.info.width) / 2) }])
     .png()
     .toBuffer();
 
   const q4Bg = await sharp({ create: { width: HALF_W, height: HALF_H, channels: 3, background: { r: 244, g: 91, b: 83 } } })
-    .composite([{ input: q4Content, top: Math.round((HALF_H - targetSize) / 2), left: Math.round((HALF_W - targetSize) / 2) }])
+    .composite([{ input: q4.data, raw: q4.info, top: Math.round((HALF_H - q4.info.height) / 2), left: Math.round((HALF_W - q4.info.width) / 2) }])
     .png()
     .toBuffer();
 
   const dividerSvg = `<svg width="2500" height="1686" xmlns="http://www.w3.org/2000/svg">
-    <line x1="1250" y1="0" x2="1250" y2="1686" stroke="white" stroke-width="3" stroke-opacity="0.3" />
-    <line x1="0" y1="843" x2="2500" y2="843" stroke="white" stroke-width="3" stroke-opacity="0.3" />
+    <line x1="1250" y1="0" x2="1250" y2="1686" stroke="white" stroke-width="3" stroke-opacity="0.35" />
+    <line x1="0" y1="843" x2="2500" y2="843" stroke="white" stroke-width="3" stroke-opacity="0.35" />
   </svg>`;
 
   // Master Composite
@@ -82,7 +99,7 @@ async function buildFullBleedOldStyle() {
     .jpeg({ quality: 95 })
     .toFile(outputPath);
 
-  console.log(`✅ Successfully generated full-bleed rich menu with old aesthetic: ${outputPath}`);
+  console.log(`✅ Successfully generated full-bleed rich menu with old aesthetic (Full text & intact 'ย์'): ${outputPath}`);
 }
 
 buildFullBleedOldStyle().catch(console.error);
