@@ -13,6 +13,7 @@ import {
   Sparkles,
   ChevronRight,
   ShieldCheck,
+  ShieldAlert,
   FileText,
   CalendarDays
 } from 'lucide-react';
@@ -170,6 +171,14 @@ export default function DoctorLiffPage() {
     d => d.id !== currentDoctor?.id && d.department_id === currentDoctor?.department_id && d.is_active
   );
 
+  // Leave Balance & Quota Calculations
+  const selectedBalance = balances.find(b => b.leave_type_id === selectedType?.id);
+  const remainingDays = selectedBalance !== undefined ? Number(selectedBalance.remaining_days) : null;
+  const isPersonalQuotaExhausted = selectedBalance !== undefined && remainingDays !== null && remainingDays <= 0;
+  const isRequestedExceeded = selectedBalance !== undefined && remainingDays !== null && durationPreview && durationPreview.duration_days > remainingDays;
+  const isDeptQuotaFull = Boolean(quotaInfo && quotaInfo.status === 'FULL' && !isEmergency);
+  const isBlockedByQuota = isPersonalQuotaExhausted || isRequestedExceeded || isDeptQuotaFull;
+
   // Handle Form Submission
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -177,6 +186,21 @@ export default function DoctorLiffPage() {
       setErrorMessage('กรุณาเลือกประเภทการลา');
       return;
     }
+
+    // Quota Full Checks
+    if (isPersonalQuotaExhausted) {
+      setErrorMessage(`ไม่สามารถยื่นลาได้ เนื่องจากสิทธิ์${selectedType.name_th}คงเหลือ 0 วัน (โควตาเต็ม)`);
+      return;
+    }
+    if (isRequestedExceeded) {
+      setErrorMessage(`สิทธิ์วันลาคงเหลือไม่เพียงพอ (ต้องการลา ${durationPreview.duration_days} วัน แต่คงเหลือ ${remainingDays} วัน)`);
+      return;
+    }
+    if (isDeptQuotaFull) {
+      setErrorMessage(`โควตาการลาของแผนก${quotaInfo.department_name}ในวันที่เลือกเต็มแล้ว (${quotaInfo.current_on_leave}/${quotaInfo.max_allowed} ท่าน) ไม่สามารถยื่นลาได้`);
+      return;
+    }
+
     if (!reason.trim()) {
       setErrorMessage('กรุณาระบุเหตุผลการลา');
       return;
@@ -443,6 +467,10 @@ export default function DoctorLiffPage() {
             <div className="grid grid-cols-2 gap-2.5">
               {leaveTypes.map(lt => {
                 const isSelected = selectedType?.id === lt.id;
+                const bal = balances.find(b => b.leave_type_id === lt.id);
+                const hasQuota = bal !== undefined;
+                const isFull = hasQuota && Number(bal.remaining_days) <= 0;
+
                 return (
                   <button
                     type="button"
@@ -450,28 +478,68 @@ export default function DoctorLiffPage() {
                     onClick={() => setSelectedType(lt)}
                     className={`p-3 rounded-2xl border text-left transition-all duration-300 relative flex flex-col justify-between overflow-hidden group ${
                       isSelected
-                        ? 'border-[#006699] bg-gradient-to-br from-sky-50 to-white shadow-md shadow-sky-900/10 ring-1 ring-[#006699]'
+                        ? isFull
+                          ? 'border-rose-400 bg-gradient-to-br from-rose-50 to-white shadow-md ring-1 ring-rose-400'
+                          : 'border-[#006699] bg-gradient-to-br from-sky-50 to-white shadow-md shadow-sky-900/10 ring-1 ring-[#006699]'
+                        : isFull
+                        ? 'border-rose-200/90 bg-rose-50/30 hover:border-rose-300'
                         : 'border-slate-200 hover:border-sky-300 hover:shadow-sm hover:-translate-y-0.5 bg-white'
                     }`}
                   >
                     {isSelected && (
-                      <div className="absolute top-0 right-0 w-12 h-12 bg-sky-200/30 rounded-bl-full -mr-2 -mt-2"></div>
+                      <div className={`absolute top-0 right-0 w-12 h-12 rounded-bl-full -mr-2 -mt-2 ${isFull ? 'bg-rose-200/40' : 'bg-sky-200/30'}`} />
                     )}
                     <div className="flex items-center justify-between relative z-10">
                       <span className="text-xs font-bold text-slate-800">{lt.name_th}</span>
-                      <span
-                        className="w-2.5 h-2.5 rounded-full"
-                        style={{ backgroundColor: lt.color || '#0ea5e9' }}
-                      />
+                      <div className="flex items-center gap-1.5">
+                        {isFull && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
+                            โควตาเต็ม
+                          </span>
+                        )}
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: isFull ? '#ef4444' : (lt.color || '#0ea5e9') }}
+                        />
+                      </div>
                     </div>
-                    <div className="text-[10px] text-slate-500 mt-1">
-                      {lt.allows_half_day ? 'ลาครึ่งวันได้' : 'เต็มวันเท่านั้น'}
-                      {lt.min_notice_days > 0 && ` • ล่วงหน้า ${lt.min_notice_days} วัน`}
+                    <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between gap-1 flex-wrap">
+                      <span>{lt.allows_half_day ? 'ลาครึ่งวันได้' : 'เต็มวันเท่านั้น'}</span>
+                      {hasQuota && (
+                        <span className={`font-semibold ${isFull ? 'text-rose-600 font-bold' : 'text-[#006699]'}`}>
+                          เหลือ {bal.remaining_days} วัน
+                        </span>
+                      )}
                     </div>
                   </button>
                 );
               })}
             </div>
+
+            {/* Quota Exhausted Alert */}
+            {isPersonalQuotaExhausted && (
+              <div className="mt-2.5 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-start gap-2.5 animate-in fade-in">
+                <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="font-bold">สิทธิ์วันลาคงเหลือหมดแล้ว (โควตาเต็ม 0 วัน):</strong>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-rose-700">
+                    ท่านใช้สิทธิ์ <strong>{selectedType?.name_th}</strong> ครบตามโควตาประจำปีแล้ว ระบบไม่อนุญาตให้กดส่งใบลาประเภทนี้ (ปุ่มส่งใบลาถูกปิดใช้งาน)
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {isRequestedExceeded && !isPersonalQuotaExhausted && (
+              <div className="mt-2.5 p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs flex items-start gap-2.5 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="font-bold">จำนวนวันลาเกินสิทธิ์คงเหลือ:</strong>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-amber-700">
+                    ท่านเลือกวันลา {durationPreview?.duration_days} วัน แต่มีสิทธิ์คงเหลือ {remainingDays} วัน กรุณาปรับลดจำนวนวันลา
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 2. เลือกช่วงเวลา & วันที่ */}
@@ -591,10 +659,16 @@ export default function DoctorLiffPage() {
             </div>
           )}
 
-          {/* Exception Warning if Quota Full */}
+          {/* Department Quota Full Alert */}
           {quotaInfo?.status === 'FULL' && (
-            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800">
-              💡 <strong>คำขอข้อยกเว้นพิเศษ:</strong> โควตาวันนี้เต็มแล้ว หากท่านจำเป็นต้องลาจริง ๆ สามารถส่งคำขอได้ ระบบจะส่งเตือนฝ่ายการแพทย์และหัวหน้าแผนกเป็นกรณีเร่งด่วนพิเศษ
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+              <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="font-bold">โควตาแพทย์ลาของแผนกเต็มแล้ว ({quotaInfo.current_on_leave} / {quotaInfo.max_allowed} ท่าน):</strong>
+                <p className="text-[11px] mt-0.5 leading-relaxed text-rose-700">
+                  ระบบจำกัดแพทย์ลาพร้อมกันไม่เกิน {quotaInfo.max_allowed} ท่านต่อวันเพื่อความปลอดภัยของผู้ป่วย จึงไม่สามารถกดส่งใบลาในวันที่เลือกได้ หากมีเหตุจำเป็นเร่งด่วน กรุณาติดต่อหัวหน้าแผนกหรือฝ่ายการแพทย์
+                </p>
+              </div>
             </div>
           )}
 
@@ -715,15 +789,30 @@ export default function DoctorLiffPage() {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || isBlockedByQuota}
             className={`w-full py-3.5 px-4 rounded-2xl text-white font-bold text-[13px] flex items-center justify-center gap-2 transition-all duration-300 ${
-              submitting
-                ? 'bg-slate-400 cursor-not-allowed shadow-none'
+              submitting || isBlockedByQuota
+                ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
                 : 'bg-gradient-to-r from-[#006699] to-[#008b8b] hover:shadow-floating hover:-translate-y-0.5 active:scale-[0.98]'
             }`}
           >
             {submitting ? (
               <span>กำลังประมวลผลและส่ง LINE...</span>
+            ) : isPersonalQuotaExhausted ? (
+              <>
+                <ShieldAlert className="w-4 h-4 text-rose-500" />
+                <span>🚫 สิทธิ์วันลาหมดแล้ว (โควตาเต็ม 0 วัน) ไม่สามารถยื่นได้</span>
+              </>
+            ) : isRequestedExceeded ? (
+              <>
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                <span>🚫 จำนวนวันลาเกินสิทธิ์คงเหลือ (เหลือ {remainingDays} วัน)</span>
+              </>
+            ) : isDeptQuotaFull ? (
+              <>
+                <ShieldAlert className="w-4 h-4 text-rose-500" />
+                <span>🚫 โควตาแพทย์ลาของแผนกเต็มแล้ว ({quotaInfo?.current_on_leave}/{quotaInfo?.max_allowed} ท่าน)</span>
+              </>
             ) : (
               <>
                 <Send className="w-4 h-4" />

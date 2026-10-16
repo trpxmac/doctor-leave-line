@@ -821,6 +821,9 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     if (balanceRecord) {
       const total = Number(balanceRecord.entitlement_days) + Number(balanceRecord.carried_over_days);
       const remaining = total - Number(balanceRecord.used_days) - Number(balanceRecord.pending_days);
+      if (remaining <= 0) {
+        return res.status(400).json({ error: `ไม่สามารถยื่นลาได้ เนื่องจากสิทธิ์${leaveType.name_th}คงเหลือ 0 วัน (โควตาเต็ม)` });
+      }
       if (remaining < durationDays) {
         return res.status(400).json({ error: `วันลาคงเหลือไม่พอ (คงเหลือ ${remaining} วัน แต่ต้องการลา ${durationDays} วัน)` });
       }
@@ -844,6 +847,12 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
         current_on_leave: onLeaveCount,
         is_quota_exceeded: isException
       };
+
+      if (isException && !isEmergency && submitted_by_admin !== 'true') {
+        return res.status(400).json({
+          error: `โควตาแพทย์ลาของแผนก${dept.name_th}ในวันที่เลือกเต็มแล้ว (${onLeaveCount}/${dept.max_leave_per_day} ท่าน) ไม่สามารถยื่นลาได้`
+        });
+      }
     }
 
     // Shift Collision Check (Feature #26)

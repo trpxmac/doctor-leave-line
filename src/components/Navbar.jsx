@@ -126,7 +126,7 @@ export default function Navbar() {
                 <span className="whitespace-nowrap">ยื่นใบลา (LIFF)</span>
               </Link>
 
-              {/* 2. ประวัติการลา - Visible for Doctor role */}
+              {/* 2. ประวัติ & สิทธิ์คงเหลือ - Visible for Doctor role */}
               {isDoctorOnly && (
                 <Link
                   to="/my-history"
@@ -137,7 +137,7 @@ export default function Navbar() {
                   }`}
                 >
                   <Clock className={`w-4 h-4 shrink-0 ${location.pathname === '/my-history' ? 'text-[#006699]' : 'text-slate-400'}`} />
-                  <span className="whitespace-nowrap">ประวัติการลา</span>
+                  <span className="whitespace-nowrap">ประวัติ &amp; สิทธิ์คงเหลือ</span>
                 </Link>
               )}
 
@@ -314,6 +314,15 @@ export default function Navbar() {
             >
               <FileText className="w-4 h-4 text-[#006699]" />
               <span>ยื่นใบลา (LIFF)</span>
+            </Link>
+
+            <Link
+              to="/my-history"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100"
+            >
+              <Clock className="w-4 h-4 text-[#006699]" />
+              <span>ประวัติ &amp; สิทธิ์คงเหลือ</span>
             </Link>
 
             {(isAdmin || isApprover) && (

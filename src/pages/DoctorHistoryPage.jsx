@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   Calendar,
@@ -10,7 +11,9 @@ import {
   Trash2,
   RefreshCw,
   FileText,
-  Sparkles
+  Sparkles,
+  ArrowRight,
+  ShieldAlert
 } from 'lucide-react';
 
 export default function DoctorHistoryPage() {
@@ -128,45 +131,103 @@ export default function DoctorHistoryPage() {
 
       {/* Section 1: Doctor Leave Balances (สิทธิ์วันลาคงเหลือ) */}
       <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-2xs mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4 text-[#006699]" />
-            <span>สิทธิ์วันลาคงเหลือประจำปี ({new Date().getFullYear()})</span>
-          </h2>
-          <span className="text-[10px] text-slate-400">อัปเดตแบบ Real-time</span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3.5">
+          <div>
+            <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-[#006699]" />
+              <span>สิทธิ์วันลาคงเหลือประจำปี ({new Date().getFullYear()})</span>
+            </h2>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              ตรวจสอบโควตาวันลาคงเหลือ สิทธิ์ที่ใช้ไปแล้ว และยอดคำขอที่อยู่ระหว่างรออนุมัติ
+            </p>
+          </div>
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1 px-3 py-1.5 bg-sky-50 text-[#006699] hover:bg-sky-100 border border-sky-200 rounded-lg text-xs font-bold transition-all self-start sm:self-auto"
+          >
+            <span>ไปหน้ายื่นใบลา</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
           {balances.length === 0 ? (
-            <div className="col-span-full text-center py-4 text-xs text-slate-400">
+            <div className="col-span-full text-center py-6 text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
               {currentDoctor?.doctor_type === 'PART_TIME'
-                ? 'แพทย์พาร์ทไทม์ไม่มีโควตาวันลาพักร้อน (ยื่นลาไม่รับค่าตอบแทนได้ตามจริง)'
-                : 'กำลังโหลดสิทธิ์คงเหลือ...'}
+                ? 'แพทย์พาร์ทไทม์ไม่มีโควตาวันลาพักร้อน (สามารถยื่นลาไม่รับค่าตอบแทนได้ตามจริง)'
+                : 'กำลังโหลดสิทธิ์วันลาคงเหลือ...'}
             </div>
           ) : (
-            balances.map(b => (
-              <div
-                key={b.id}
-                className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/80 hover:border-sky-300 transition-all shadow-2xs"
-              >
-                <div className="text-[11px] font-semibold text-slate-600 truncate">
-                  {b.leave_type_name}
-                </div>
-                <div className="mt-1 flex items-baseline justify-between">
-                  <span className="text-lg font-bold text-[#006699]">
-                    {b.remaining_days}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-medium">
-                    / {b.total_quota} วัน
-                  </span>
-                </div>
-                {b.pending_days > 0 && (
-                  <div className="text-[9px] text-amber-600 font-medium mt-0.5">
-                    (รออนุมัติ {b.pending_days} วัน)
+            balances.map(b => {
+              const isFull = Number(b.remaining_days) <= 0;
+              const used = Number(b.used_days || 0);
+              const pending = Number(b.pending_days || 0);
+              const total = Number(b.total_quota || 0);
+              const pct = total > 0 ? Math.min(100, Math.max(0, (Number(b.remaining_days) / total) * 100)) : 0;
+
+              return (
+                <div
+                  key={b.id}
+                  className={`p-3.5 rounded-2xl border transition-all duration-200 flex flex-col justify-between ${
+                    isFull
+                      ? 'bg-rose-50/70 border-rose-200 shadow-2xs'
+                      : 'bg-white border-slate-200/90 hover:border-sky-300 hover:shadow-xs'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-bold text-slate-800 truncate">
+                        {b.leave_type_name}
+                      </span>
+                      {isFull ? (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
+                          โควตาเต็ม
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded shrink-0">
+                          คงเหลือ
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-baseline justify-between my-1">
+                      <div className="flex items-baseline gap-1">
+                        <span className={`text-2xl font-black ${isFull ? 'text-rose-600' : 'text-[#006699]'}`}>
+                          {b.remaining_days}
+                        </span>
+                        <span className="text-xs text-slate-500 font-medium">วัน</span>
+                      </div>
+                      <span className="text-xs text-slate-400 font-medium">
+                        โควตาเต็ม {total} วัน
+                      </span>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden my-2">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          isFull
+                            ? 'bg-rose-500'
+                            : pct < 25
+                            ? 'bg-amber-500'
+                            : 'bg-[#006699]'
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
                   </div>
-                )}
-              </div>
-            ))
+
+                  <div className="pt-1 border-t border-slate-100/80 flex items-center justify-between text-[10px] text-slate-500">
+                    <span>ใช้แล้ว: <strong className="text-slate-700">{used}</strong> วัน</span>
+                    {pending > 0 ? (
+                      <span className="text-amber-600 font-semibold">(รออนุมัติ {pending} วัน)</span>
+                    ) : (
+                      <span className="text-slate-400">ไม่มีคำขอค้าง</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       </div>
