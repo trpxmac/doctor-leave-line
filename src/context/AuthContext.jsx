@@ -67,7 +67,13 @@ export function AuthProvider({ children }) {
             }
           }
         } else {
-          liff.login();
+          if (liff.isInClient()) {
+            liff.login();
+          } else {
+            console.log("Desktop browser: outside LINE client, using Developer Persona Switcher mode.");
+            setIsLiffMode(false);
+            await fetchDoctors();
+          }
         }
       } catch (err) {
         console.error("LIFF Init Error:", err);
