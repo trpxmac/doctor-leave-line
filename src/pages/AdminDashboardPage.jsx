@@ -19,7 +19,8 @@ import {
   ChevronRight,
   Download,
   CalendarDays,
-  Award
+  Award,
+  GitMerge
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import CalendarView from '../components/CalendarView';
@@ -231,6 +232,14 @@ export default function AdminDashboardPage() {
           >
             <Award className="w-4 h-4 text-amber-700" />
             <span>คำนวณอายุงาน</span>
+          </Link>
+
+          <Link
+            to="/admin/master-data"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-98"
+          >
+            <GitMerge className="w-4 h-4 text-purple-700" />
+            <span>สายอนุมัติ & การลา</span>
           </Link>
 
           <button

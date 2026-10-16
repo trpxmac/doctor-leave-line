@@ -265,19 +265,146 @@ router.put('/departments/:id', (req, res) => {
 });
 
 // -------------------------------------------------------------
-// LEAVE TYPES
+// -------------------------------------------------------------
+// LEAVE TYPES (PHASE 4 - ITEM 25)
 // -------------------------------------------------------------
 router.get('/leave-types', (req, res) => {
   const db = getDb();
-  const { doctorType } = req.query; // 'FULL_TIME' or 'PART_TIME'
+  const { doctorType, includeAll } = req.query;
   
-  let types = db.leave_types.filter(t => t.is_active);
+  let types = includeAll === 'true' ? [...db.leave_types] : db.leave_types.filter(t => t.is_active);
   if (doctorType === 'PART_TIME') {
-    // Only leave types allowed for part time (is_full_time_only === false)
     types = types.filter(t => !t.is_full_time_only);
   }
 
-  res.json(types.sort((a, b) => a.sort_order - b.sort_order));
+  res.json(types.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
+});
+
+// POST /api/leave-types - Add new leave type
+router.post('/leave-types', (req, res) => {
+  const db = getDb();
+  const {
+    code,
+    name_th,
+    name_en,
+    count_mode = 'WORKING_DAYS',
+    allows_half_day = true,
+    requires_attachment = false,
+    attachment_threshold_days = 2.0,
+    min_notice_days = 0,
+    max_days_per_request,
+    allows_backdate = false,
+    is_full_time_only = false,
+    color = '#006699',
+    sort_order,
+    actor_id
+  } = req.body;
+
+  if (!code || !name_th) {
+    return res.status(400).json({ error: 'กรุณาระบุรหัสและชื่อประเภทการลา' });
+  }
+
+  const cleanCode = code.trim().toUpperCase().replace(/\s+/g, '_');
+  if (db.leave_types.some(lt => lt.code === cleanCode)) {
+    return res.status(400).json({ error: `รหัสประเภทการลา '${cleanCode}' มีอยู่แล้วในระบบ` });
+  }
+
+  const newType = {
+    id: uuidv4(),
+    code: cleanCode,
+    name_th: name_th.trim(),
+    name_en: (name_en || '').trim(),
+    count_mode: count_mode === 'CALENDAR_DAYS' ? 'CALENDAR_DAYS' : 'WORKING_DAYS',
+    allows_half_day: Boolean(allows_half_day),
+    requires_attachment: Boolean(requires_attachment),
+    attachment_threshold_days: Number(attachment_threshold_days) || 0,
+    min_notice_days: Number(min_notice_days) || 0,
+    max_days_per_request: max_days_per_request ? Number(max_days_per_request) : null,
+    allows_backdate: Boolean(allows_backdate),
+    is_full_time_only: Boolean(is_full_time_only),
+    color: color || '#006699',
+    sort_order: Number(sort_order) || (db.leave_types.length + 1),
+    is_active: true
+  };
+
+  db.leave_types.push(newType);
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'leave_types',
+    record_id: newType.id,
+    action: 'INSERT',
+    actor_id: actor_id || null,
+    new_data: newType,
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.status(201).json(newType);
+});
+
+// PUT /api/leave-types/:id - Update leave type
+router.put('/leave-types/:id', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  const index = db.leave_types.findIndex(lt => lt.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'ไม่พบประเภทการลาที่ระบุ' });
+  }
+
+  const oldData = { ...db.leave_types[index] };
+  const updates = req.body;
+
+  if (updates.name_th) db.leave_types[index].name_th = updates.name_th.trim();
+  if (updates.name_en !== undefined) db.leave_types[index].name_en = updates.name_en.trim();
+  if (updates.count_mode) db.leave_types[index].count_mode = updates.count_mode;
+  if (updates.allows_half_day !== undefined) db.leave_types[index].allows_half_day = Boolean(updates.allows_half_day);
+  if (updates.requires_attachment !== undefined) db.leave_types[index].requires_attachment = Boolean(updates.requires_attachment);
+  if (updates.attachment_threshold_days !== undefined) db.leave_types[index].attachment_threshold_days = Number(updates.attachment_threshold_days);
+  if (updates.min_notice_days !== undefined) db.leave_types[index].min_notice_days = Number(updates.min_notice_days);
+  if (updates.allows_backdate !== undefined) db.leave_types[index].allows_backdate = Boolean(updates.allows_backdate);
+  if (updates.is_full_time_only !== undefined) db.leave_types[index].is_full_time_only = Boolean(updates.is_full_time_only);
+  if (updates.color) db.leave_types[index].color = updates.color;
+  if (updates.is_active !== undefined) db.leave_types[index].is_active = Boolean(updates.is_active);
+  if (updates.sort_order !== undefined) db.leave_types[index].sort_order = Number(updates.sort_order);
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'leave_types',
+    record_id: id,
+    action: 'UPDATE',
+    actor_id: updates.actor_id || null,
+    old_data: oldData,
+    new_data: db.leave_types[index],
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.json(db.leave_types[index]);
+});
+
+// DELETE /api/leave-types/:id - Delete or disable
+router.delete('/leave-types/:id', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  const index = db.leave_types.findIndex(lt => lt.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'ไม่พบประเภทการลาที่ระบุ' });
+  }
+
+  const hasRequests = (db.leave_requests || []).some(lr => lr.leave_type_id === id);
+  if (hasRequests) {
+    db.leave_types[index].is_active = false;
+    saveStore();
+    return res.json({ message: 'ปิดการใช้งานประเภทการลาเรียบร้อย (มีประวัติการลาในระบบ)', softDeleted: true });
+  }
+
+  const deleted = db.leave_types[index];
+  db.leave_types.splice(index, 1);
+  saveStore();
+  res.json({ message: 'ลบประเภทการลาสำเร็จ', id });
 });
 
 // -------------------------------------------------------------
@@ -1761,6 +1888,197 @@ router.post('/tenure/apply', (req, res) => {
     updatedCount,
     insertedCount
   });
+});
+
+// -------------------------------------------------------------
+// APPROVAL ROUTES MANAGEMENT (PHASE 4 - ITEM 24)
+// -------------------------------------------------------------
+
+// GET /api/approval-routes - List all approval routes with doctor & approver info
+router.get('/approval-routes', (req, res) => {
+  const db = getDb();
+  if (!db.approval_routes) db.approval_routes = [];
+
+  const enriched = db.approval_routes.map(route => {
+    const doctor = db.doctors.find(d => d.id === route.doctor_id);
+    const approver = db.doctors.find(d => d.id === route.approver_id);
+    const dept = doctor ? db.departments.find(dp => dp.id === doctor.department_id) : null;
+
+    return {
+      ...route,
+      doctor_name: doctor ? `${doctor.prefix_th}${doctor.first_name_th} ${doctor.last_name_th}` : 'ไม่ระบุ',
+      doctor_employee_id: doctor?.employee_id || '-',
+      department_name: dept?.name_th || 'ไม่ระบุ',
+      approver_name: approver ? `${approver.prefix_th}${approver.first_name_th} ${approver.last_name_th}` : 'ไม่ระบุ',
+      approver_employee_id: approver?.employee_id || '-'
+    };
+  });
+
+  res.json(enriched);
+});
+
+// POST /api/approval-routes - Create or update an approval route
+router.post('/approval-routes', (req, res) => {
+  const db = getDb();
+  if (!db.approval_routes) db.approval_routes = [];
+
+  const { doctor_id, step_order = 1, approver_id, is_active = true, actor_id } = req.body;
+
+  if (!doctor_id || !approver_id) {
+    return res.status(400).json({ error: 'กรุณาระบุแพทย์และผู้อนุมัติ' });
+  }
+
+  if (doctor_id === approver_id) {
+    return res.status(400).json({ error: 'แพทย์ไม่สามารถเป็นผู้อนุมัติตนเองได้' });
+  }
+
+  const existingIndex = db.approval_routes.findIndex(
+    r => r.doctor_id === doctor_id && r.step_order === Number(step_order)
+  );
+
+  let result;
+  if (existingIndex !== -1) {
+    db.approval_routes[existingIndex].approver_id = approver_id;
+    db.approval_routes[existingIndex].is_active = Boolean(is_active);
+    result = db.approval_routes[existingIndex];
+  } else {
+    result = {
+      id: uuidv4(),
+      doctor_id,
+      step_order: Number(step_order),
+      approver_id,
+      is_active: Boolean(is_active),
+      created_at: new Date().toISOString()
+    };
+    db.approval_routes.push(result);
+  }
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'approval_routes',
+    record_id: result.id,
+    action: existingIndex !== -1 ? 'UPDATE' : 'INSERT',
+    actor_id: actor_id || null,
+    new_data: result,
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.status(201).json(result);
+});
+
+// PUT /api/approval-routes/:id - Update approval route
+router.put('/approval-routes/:id', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  const { approver_id, step_order, is_active, actor_id } = req.body;
+
+  const index = db.approval_routes.findIndex(r => r.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'ไม่พบสายอนุมัติที่ระบุ' });
+  }
+
+  if (approver_id) {
+    if (db.approval_routes[index].doctor_id === approver_id) {
+      return res.status(400).json({ error: 'แพทย์ไม่สามารถเป็นผู้อนุมัติตนเองได้' });
+    }
+    db.approval_routes[index].approver_id = approver_id;
+  }
+  if (step_order !== undefined) {
+    db.approval_routes[index].step_order = Number(step_order);
+  }
+  if (is_active !== undefined) {
+    db.approval_routes[index].is_active = Boolean(is_active);
+  }
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'approval_routes',
+    record_id: id,
+    action: 'UPDATE',
+    actor_id: actor_id || null,
+    new_data: db.approval_routes[index],
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.json(db.approval_routes[index]);
+});
+
+// DELETE /api/approval-routes/:id - Delete approval route
+router.delete('/approval-routes/:id', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  const index = db.approval_routes.findIndex(r => r.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'ไม่พบสายอนุมัติที่ระบุ' });
+  }
+
+  const deleted = db.approval_routes[index];
+  db.approval_routes.splice(index, 1);
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'approval_routes',
+    record_id: id,
+    action: 'DELETE',
+    actor_id: req.body?.actor_id || null,
+    old_data: deleted,
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.json({ message: 'ลบสายอนุมัติสำเร็จ', id });
+});
+
+// POST /api/approval-routes/batch-department - Assign approver for all doctors in a department
+router.post('/approval-routes/batch-department', (req, res) => {
+  const db = getDb();
+  const { department_id, approver_id, step_order = 1, actor_id } = req.body;
+
+  if (!department_id || !approver_id) {
+    return res.status(400).json({ error: 'กรุณาระบุแผนกและผู้อนุมัติ' });
+  }
+
+  const deptDoctors = db.doctors.filter(d => d.department_id === department_id && d.id !== approver_id);
+  let count = 0;
+
+  deptDoctors.forEach(doc => {
+    const existing = db.approval_routes.find(
+      r => r.doctor_id === doc.id && r.step_order === Number(step_order)
+    );
+    if (existing) {
+      existing.approver_id = approver_id;
+      existing.is_active = true;
+    } else {
+      db.approval_routes.push({
+        id: uuidv4(),
+        doctor_id: doc.id,
+        step_order: Number(step_order),
+        approver_id,
+        is_active: true,
+        created_at: new Date().toISOString()
+      });
+    }
+    count++;
+  });
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'approval_routes',
+    record_id: `batch-dept-${department_id}`,
+    action: 'UPDATE',
+    actor_id: actor_id || null,
+    new_data: { department_id, approver_id, assigned_count: count },
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.json({ message: `กำหนดผู้อนุมัติให้แพทย์ในแผนกเรียบร้อย (${count} ท่าน)`, count });
 });
 
 export default router;

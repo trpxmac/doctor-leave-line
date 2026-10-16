@@ -10,6 +10,7 @@ import AdminCriteriaPage from './pages/AdminCriteriaPage';
 import AdminAuditPage from './pages/AdminAuditPage';
 import AdminHolidaysPage from './pages/AdminHolidaysPage';
 import AdminTenurePage from './pages/AdminTenurePage';
+import AdminMasterDataPage from './pages/AdminMasterDataPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import OnboardingPage from './pages/OnboardingPage';
 
@@ -72,6 +73,11 @@ function AppContent() {
               <Route path="/admin/tenure" element={
                 <ProtectedRoute allowedRoles={['MEDICAL_ADMIN', 'ADMIN']}>
                   <AdminTenurePage />
+                </ProtectedRoute>
+              } />
+              <Route path="/admin/master-data" element={
+                <ProtectedRoute allowedRoles={['MEDICAL_ADMIN', 'ADMIN']}>
+                  <AdminMasterDataPage />
                 </ProtectedRoute>
               } />
               <Route path="*" element={<Navigate to="/" replace />} />

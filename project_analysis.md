@@ -184,8 +184,8 @@ approver_id: 'c0000000-0000-0000-0000-000000000002',
 |---|---------|----------|
 | 22 | คำนวณสิทธิ์วันลาพักร้อนประจำปี (Tenure) | ✅ เสร็จ - หน้า UI คำนวณสิทธิ์ตามอายุงาน ([AdminTenurePage.jsx](file:///d:/doctor-leave-line/src/pages/AdminTenurePage.jsx)), เกณฑ์ Prorate ปีแรก (0.5 วัน/เดือน), ขั้นบันไดสิทธิ์ (6-15 วัน), ระบบยกยอด (Carry-over) และ Batch Apply ทั้ง รพ. |
 | 23 | จัดการวันหยุดนักขัตฤกษ์ (Public Holidays) | ✅ เสร็จ - หน้า UI จัดการวันหยุด รพ. ([AdminHolidaysPage.jsx](file:///d:/doctor-leave-line/src/pages/AdminHolidaysPage.jsx)), ปุ่ม Quick Seed วันหยุดราชการไทย, Duration Preview แบบเรียลไทม์ และผูกกับ Working Days Engine |
-| 24 | ตั้งค่าโครงสร้างผู้อนุมัติ (Line Approve) | หน้า UI สำหรับผูกสายบังคับบัญชาแบบเจาะจงบุคคล (Approver 1, 2, 3) แทนที่การล็อกเป็นหัวหน้าแผนก |
-| 25 | จัดการรูปแบบการลา (Leave Types) | หน้า UI สำหรับเพิ่ม/ลด และตั้งค่ารูปแบบการลา |
+| 24 | ตั้งค่าโครงสร้างผู้อนุมัติ (Line Approve) | ✅ เสร็จ - หน้า UI จัดการสายอนุมัติรายบุคคล และปุ่ม Batch Assign ผู้อนุมัติตามแผนก ([AdminMasterDataPage.jsx](file:///d:/doctor-leave-line/src/pages/AdminMasterDataPage.jsx)) |
+| 25 | จัดการรูปแบบการลา (Leave Types) | ✅ เสร็จ - หน้า UI เพิ่ม/แก้ไข/ปิดใช้งานประเภทการลา, กำหนดเงื่อนไขวันแจ้งล่วงหน้า, การบังคับแนบเอกสาร และการลาย้อนหลัง |
 | 26 | ระบบจัดการตารางเวร (Shift & Schedule) | ระบบจัดตารางเวร (Consult, ER, Night Duty) และซิงก์ข้อมูลวันที่ลาไม่ให้ชนกับวันเข้าเวร |
 
 ---
@@ -219,8 +219,9 @@ graph TD
     
     D --> D1["22. Tenure Leave Calculation (Done)"]
     D --> D2["23. Holidays Management UI & Engine (Done)"]
-    D --> D3["24. Approver Hierarchy & Leave Types"]
-    D --> D4["26. Shift Schedule Management"]
+    D --> D3["24. Approver Hierarchy (Done)"]
+    D --> D4["25. Leave Types Management (Done)"]
+    D --> D5["26. Shift Schedule Management"]
 ```
 
 ---
@@ -230,9 +231,11 @@ graph TD
 | หมวด | เสร็จ | เหลือ |
 |------|-------|-------|
 | **Database Schema** | ✅ 100% | — |
-| **Backend API** | ✅ 100% | Validation, Reminders, Cancel Notification, Overlap Check, Quota Fallback, Holidays CRUD, Tenure Calculation |
+| **Backend API** | ✅ 100% | Validation, Reminders, Cancel Notification, Overlap Check, Quota Fallback, Holidays CRUD, Tenure Engine, Approver Routes & Leave Types CRUD |
 | **LINE Flex Messages** | ✅ 100% | รองรับครบถ้วน และแก้ปัญหา opacity 400 Bad Request แล้ว |
-| **Frontend Pages** | ✅ 100% | Calendar View, Holidays Management, Tenure Engine และหน้าจอครบถ้วนตาม PRD |
+| **Frontend Pages** | ✅ 100% | Calendar View, Holidays Management, Tenure Engine, Master Data Portal และหน้าจอครบถ้วนตาม PRD |
+| **Approver Hierarchy** | ✅ 100% | กำหนดสายอนุมัติรายบุคคล (Step 1-2) และปุ่ม Quick Assign ตามแผนก |
+| **Leave Types Policy** | ✅ 100% | CRUD รูปแบบการลา, กำหนดวันแจ้งล่วงหน้า, การแนบเอกสาร, สิทธิ์ Full-Time only |
 | **Tenure & Prorate Engine** | ✅ 100% | คำนวณสิทธิ์พักร้อนตามอายุงาน, Prorate ปีแรก, ยกยอดข้ามปี (Carry-over), Batch Apply |
 | **Public Holidays Engine** | ✅ 100% | หน้า UI แอดมิน, Quick Seed วันหยุดไทย, Live Duration Preview หักวันหยุดอัตโนมัติ |
 | **LINE LIFF Auth** | ✅ 100% | ทำ Onboarding flow และดึงโปรไฟล์จาก @line/liff สำเร็จ |

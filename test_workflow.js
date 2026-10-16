@@ -227,7 +227,55 @@ async function runTests() {
       const applyData = await applyRes.json();
       console.log(`   ✅ Batch applied tenure entitlements: ${applyData.message}`);
 
-      console.log('\n🎉 ALL 14 WORKFLOW TESTS PASSED PERFECTLY!\n');
+      // 15. Test Master Data: Approval Routes & Leave Types (Phase 4 - Items 24 & 25)
+      console.log('\n15. Testing Master Data: Approval Routes & Leave Types (Phase 4)...');
+      const routesRes = await fetch(`${baseUrl}/approval-routes`);
+      const routesList = await routesRes.json();
+      console.log(`   ✅ Fetched ${routesList.length} approval routes (Joined with doctor & approver names)`);
+
+      const newRouteRes = await fetch(`${baseUrl}/approval-routes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          doctor_id: drC.doctor_id,
+          approver_id: 'c0000000-0000-0000-0000-000000000001',
+          step_order: 2
+        })
+      });
+      const createdRoute = await newRouteRes.json();
+      console.log(`   ✅ Configured multi-step approval route: Step ${createdRoute.step_order} for doctor successfully!`);
+
+      const createTypeRes = await fetch(`${baseUrl}/leave-types`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: 'SABBATICAL',
+          name_th: 'ลาเพื่อการศึกษาดูงานระยะยาว',
+          name_en: 'Sabbatical Leave',
+          count_mode: 'WORKING_DAYS',
+          allows_half_day: false,
+          requires_attachment: true,
+          min_notice_days: 60,
+          is_full_time_only: true,
+          color: '#8b5cf6'
+        })
+      });
+      const createdType = await createTypeRes.json();
+      console.log(`   ✅ Created custom leave type: ${createdType.name_th} (${createdType.code})`);
+
+      const updateTypeRes = await fetch(`${baseUrl}/leave-types/${createdType.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ min_notice_days: 45 })
+      });
+      const updatedType = await updateTypeRes.json();
+      console.log(`   ✅ Updated leave type policy: min_notice_days = ${updatedType.min_notice_days} days`);
+
+      const delTypeRes = await fetch(`${baseUrl}/leave-types/${createdType.id}`, { method: 'DELETE' });
+      const delTypeData = await delTypeRes.json();
+      console.log(`   ✅ Deleted custom leave type: ${delTypeData.message}`);
+
+      console.log('\n🎉 ALL 15 WORKFLOW TESTS PASSED PERFECTLY!\n');
     } catch (err) {
       console.error('❌ Test failed:', err);
     } finally {
