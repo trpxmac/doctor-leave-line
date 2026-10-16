@@ -106,7 +106,7 @@ export default function AdminCriteriaPage() {
         <div className="space-y-1">
           <h4 className="font-bold">กฎเกณฑ์ทางธุรกิจตามมติที่ประชุม (BSI Medical Policy)</h4>
           <p className="text-sky-800 leading-relaxed text-[11px]">
-            หากวันใดมีแพทย์ยื่นลาครบตามโควตาสูงสุดแล้ว ระบบจะเตือนเป็น <strong>"โควตาเต็ม (สีแดง)"</strong> บนหน้าจอปฏิทินของแพทย์ และหากยื่นเข้ามา ระบบจะ Flag เป็น <strong>"คำขอข้อยกเว้นพิเศษ (Exception Request)"</strong> เพื่อให้พี่กุ้งและหัวหน้าแผนกพิจารณาเป็นพิเศษ
+            หากวันใดมีแพทย์ยื่นลาครบตามโควตาสูงสุดแล้ว ระบบจะเตือนเป็น <strong>"โควตาเต็ม (สีแดง)"</strong> บนหน้าจอปฏิทินของแพทย์ และหากยื่นเข้ามา ระบบจะ Flag เป็น <strong>"คำขอข้อยกเว้นพิเศษ (Exception Request)"</strong> เพื่อให้ฝ่ายการแพทย์และหัวหน้าแผนกพิจารณาเป็นพิเศษ
           </p>
         </div>
       </div>

@@ -48,7 +48,7 @@ async function main() {
   console.log(`   • Area 1: ยื่นใบลา -> https://liff.line.me/${LIFF_ID}`);
   console.log(`   • Area 2: ประวัติ & สิทธิ์ -> https://liff.line.me/${LIFF_ID}/my-history`);
   console.log(`   • Area 3: ตารางเวรแพทย์ -> https://liff.line.me/${LIFF_ID}/admin/shifts`);
-  console.log(`   • Area 4: ติดต่อพี่กุ้ง (ฉุกเฉิน) -> Direct Emergency Text / Phone`);
+  console.log(`   • Area 4: ติดต่อฝ่ายการแพทย์ (ฉุกเฉิน) -> Direct Emergency Text / Phone`);
 
   // 3. Check LINE API Token
   const isMockToken = !TOKEN || TOKEN.includes('YOUR_') || TOKEN.length < 30;

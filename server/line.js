@@ -819,3 +819,145 @@ export function buildWelcomeFlex(doctorName = '') {
   };
 }
 
+/**
+ * Contact Info Flex Message for Quadrant 4 / Emergency Contact
+ */
+export function buildContactCardFlex(settings = {}) {
+  const deptName = settings.department_name || 'ฝ่ายการแพทย์ (Medical Affairs)';
+  const coordinator = settings.coordinator_name || 'เจ้าหน้าที่ฝ่ายการแพทย์';
+  const phoneEmergency = settings.phone_emergency || '076-361-888';
+  const phoneExt = settings.phone_ext ? ` ต่อ ${settings.phone_ext}` : '';
+  const phoneHotline = settings.phone_hotline || '081-999-8888';
+  const location = settings.location || 'อาคาร A ชั้น 3 ฝ่ายการแพทย์ รพ.กรุงเทพศิริโรจน์';
+  const cleanDialNumber = (phoneHotline || phoneEmergency).replace(/[^0-9]/g, '');
+
+  return {
+    type: 'flex',
+    altText: `📞 ติดต่อ${deptName}: โทร ${phoneEmergency}${phoneExt} หรือสายด่วน ${phoneHotline}`,
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#002d74',
+        paddingAll: '18px',
+        contents: [
+          {
+            type: 'text',
+            text: 'BANGKOK HOSPITAL SIRIROJ',
+            color: '#93c5fd',
+            size: 'xs',
+            weight: 'bold',
+            letterSpacing: '1px'
+          },
+          {
+            type: 'text',
+            text: '📞 ช่องทางติดต่อฝ่ายการแพทย์',
+            color: '#ffffff',
+            size: 'md',
+            weight: 'bold',
+            margin: 'xs'
+          }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'sm',
+        paddingAll: '18px',
+        contents: [
+          {
+            type: 'text',
+            text: deptName,
+            weight: 'bold',
+            size: 'md',
+            color: '#006699'
+          },
+          {
+            type: 'text',
+            text: `ผู้ประสานงาน: ${coordinator}`,
+            size: 'xs',
+            color: '#64748b'
+          },
+          {
+            type: 'separator',
+            margin: 'sm'
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            margin: 'sm',
+            contents: [
+              { type: 'text', text: 'เบอร์หลัก รพ.:', size: 'xs', color: '#64748b', flex: 4 },
+              { type: 'text', text: `${phoneEmergency}${phoneExt}`, size: 'xs', weight: 'bold', color: '#0f172a', flex: 6 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'สายด่วน 24 ชม.:', size: 'xs', color: '#64748b', flex: 4 },
+              { type: 'text', text: phoneHotline, size: 'xs', weight: 'bold', color: '#e11d48', flex: 6 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'สถานที่ติดต่อ:', size: 'xs', color: '#64748b', flex: 4 },
+              { type: 'text', text: location, size: 'xs', color: '#334155', flex: 6, wrap: true }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#fff1f2',
+            cornerRadius: '8px',
+            paddingAll: '10px',
+            margin: 'md',
+            contents: [
+              {
+                type: 'text',
+                text: '🚨 กรณีลาฉุกเฉินเช้าวันเดียวกัน กรุณาโทรแจ้งฝ่ายการแพทย์ทันทีเพื่อประสานงานปิดตารางตรวจ',
+                size: 'xxs',
+                color: '#be123c',
+                weight: 'bold',
+                wrap: true
+              }
+            ]
+          }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'button',
+            style: 'primary',
+            color: '#006699',
+            height: 'sm',
+            action: {
+              type: 'uri',
+              label: `📞 โทรออกสายด่วน (${phoneHotline})`,
+              uri: `tel:${cleanDialNumber}`
+            }
+          },
+          {
+            type: 'button',
+            style: 'secondary',
+            height: 'sm',
+            action: {
+              type: 'uri',
+              label: '🩺 ยื่นใบลาผ่านระบบ (LIFF)',
+              uri: `https://liff.line.me/${process.env.VITE_LIFF_ID || '2011832574-WtcSrDre'}`
+            }
+          }
+        ]
+      }
+    }
+  };
+}
+

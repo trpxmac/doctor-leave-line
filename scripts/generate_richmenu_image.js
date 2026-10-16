@@ -131,7 +131,7 @@ const svgMarkup = `
     </text>
   </g>
 
-  <!-- ==================== QUADRANT 4: ติดต่อพี่กุ้ง (BOTTOM-RIGHT) ==================== -->
+  <!-- ==================== QUADRANT 4: ติดต่อฝ่ายการแพทย์ (BOTTOM-RIGHT) ==================== -->
   <g id="btn-emergency">
     <rect x="${HALF_W}" y="${HALF_H}" width="${HALF_W}" height="${HALF_H}" fill="url(#grad-rose)" />
     <!-- Inner Card Effect -->
@@ -148,10 +148,10 @@ const svgMarkup = `
 
     <!-- Text Label -->
     <text x="${HALF_W + 625}" y="${HALF_H + 600}" text-anchor="middle" font-family="'Sarabun', 'Noto Sans Thai', 'Thonburi', sans-serif" font-size="78" font-weight="bold" fill="#ffffff" letter-spacing="1">
-      ติดต่อพี่กุ้ง (ฉุกเฉิน)
+      ติดต่อฝ่ายการแพทย์
     </text>
     <text x="${HALF_W + 625}" y="${HALF_H + 670}" text-anchor="middle" font-family="'Sarabun', 'Noto Sans Thai', sans-serif" font-size="36" font-weight="500" fill="#fecdd3" letter-spacing="1">
-      24/7 Medical Admin Hotline
+      สายด่วนฉุกเฉิน 24 ชม. / Hotline
     </text>
   </g>
 

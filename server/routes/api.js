@@ -20,6 +20,7 @@ import {
   buildEmergencyAlertFlex,
   buildCancelAlertFlex,
   buildWelcomeFlex,
+  buildContactCardFlex,
   simulatedLineMessages,
   isLineConfigured
 } from '../line.js';
@@ -1243,7 +1244,7 @@ router.post('/leave-requests/:id/override', async (req, res) => {
       step_order: reqItem.current_step,
       approver_id: actorId,
       action: 'OVERRIDDEN',
-      comments: `[Override โดยพี่กุ้ง ฝ่ายการแพทย์]: ${reason}`,
+      comments: `[Override โดยฝ่ายการแพทย์]: ${reason}`,
       acted_at: new Date().toISOString()
     });
 
@@ -1264,12 +1265,13 @@ router.post('/leave-requests/:id/override', async (req, res) => {
     const doc = db.doctors.find(d => d.id === reqItem.doctor_id);
     const leaveType = db.leave_types.find(lt => lt.id === reqItem.leave_type_id);
     if (doc && doc.line_user_id) {
+      const coordinator = db.contact_settings?.coordinator_name || 'เจ้าหน้าที่ฝ่ายการแพทย์';
       const decisionFlex = buildLeaveDecisionFlex(
         reqItem,
         doc,
         leaveType,
         'APPROVED',
-        'คุณสิริมาศ (พี่กุ้ง) อนุมัติแทน',
+        `${coordinator} อนุมัติแทน (ฝ่ายการแพทย์)`,
         `อนุมัติแทนกรณีฉุกเฉิน: ${reason}`
       );
       await sendLinePushMessage(doc.line_user_id, decisionFlex);
@@ -1424,15 +1426,32 @@ router.post('/line/webhook', async (req, res) => {
         }
       }
 
-      // 2. Text Message Event (Doctor types keyword)
+      // 2. Text Message Event (Doctor types keyword or taps Rich Menu)
       if (event.type === 'message' && event.message && event.message.type === 'text') {
         const text = (event.message.text || '').trim();
-        if (text.includes('ลา') || text.includes('เมนู') || text.includes('สวัสดี') || text.includes('help') || text.includes('ติดต่อ') || text.includes('กุ้ง')) {
-          const lineUserId = event.source && event.source.userId;
-          let doc = null;
-          if (lineUserId) {
-            doc = db.doctors.find(d => d.line_user_id === lineUserId);
+        const lineUserId = event.source && event.source.userId;
+        let doc = null;
+        if (lineUserId) {
+          doc = db.doctors.find(d => d.line_user_id === lineUserId);
+        }
+
+        // A. Contact Medical Affairs / Emergency Hotline Card
+        if (
+          text.includes('ติดต่อ') ||
+          text.includes('ฝ่ายการแพทย์') ||
+          text.includes('ฉุกเฉิน') ||
+          text.includes('กุ้ง') ||
+          text.includes('สายด่วน') ||
+          text.includes('เบอร์') ||
+          text.includes('โทร')
+        ) {
+          const contactFlex = buildContactCardFlex(db.contact_settings || defaultContact);
+          if (event.replyToken) {
+            await sendLineReplyMessage(event.replyToken, contactFlex);
           }
+        }
+        // B. Welcome / Leave Menu Card
+        else if (text.includes('ลา') || text.includes('เมนู') || text.includes('สวัสดี') || text.includes('help')) {
           const docName = doc ? `${doc.prefix_th}${doc.first_name_th} ${doc.last_name_th}` : '';
           const welcomeFlex = buildWelcomeFlex(docName);
           if (event.replyToken) {

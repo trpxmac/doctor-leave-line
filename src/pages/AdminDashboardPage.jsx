@@ -51,7 +51,7 @@ export default function AdminDashboardPage() {
   const [newStartDate, setNewStartDate] = useState(todayStr);
   const [newEndDate, setNewEndDate] = useState(todayStr);
   const [newHalfDay, setNewHalfDay] = useState('FULL_DAY');
-  const [newReason, setNewReason] = useState('แพทย์โทรแจ้งพี่กุ้งโดยตรง (บันทึกแทนโดยฝ่ายการแพทย์)');
+  const [newReason, setNewReason] = useState('แพทย์โทรแจ้งฝ่ายการแพทย์โดยตรง (บันทึกแทนโดยฝ่ายการแพทย์)');
   const [formSubmitting, setFormSubmitting] = useState(false);
 
   const fetchDashboardData = async () => {
@@ -200,8 +200,8 @@ export default function AdminDashboardPage() {
               <h1 className="text-xl font-bold text-slate-900">
                 Medical Admin Portal (ฝ่ายการแพทย์)
               </h1>
-              <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                พี่กุ้ง
+              <span className="bg-sky-100 text-[#006699] text-[10px] font-bold px-2 py-0.5 rounded-full">
+                เจ้าหน้าที่ฝ่ายการแพทย์
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -603,7 +603,7 @@ export default function AdminDashboardPage() {
               บันทึกการลาแทนแพทย์ (โดยฝ่ายการแพทย์)
             </h3>
             <p className="text-xs text-slate-500 mb-4">
-              ใช้กรณีแพทย์โทรศัพท์แจ้งพี่กุ้งโดยตรง หรือเกิดเหตุฉุกเฉินไม่สะดวกเข้า LINE
+              ใช้กรณีแพทย์โทรศัพท์แจ้งฝ่ายการแพทย์โดยตรง หรือเกิดเหตุฉุกเฉินไม่สะดวกเข้า LINE
             </p>
 
             <form onSubmit={handleCreateOnBehalf} className="space-y-3.5 text-xs">
