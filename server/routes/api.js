@@ -992,7 +992,6 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     const requestNo = `LV-${currentYear}-${String(countThisYear).padStart(5, '0')}`;
 
     const isUploadLater = upload_later === 'true' || upload_later === true;
-    const leaveType = db.leave_types.find(lt => lt.id === leave_type_id);
     const deadlineDays = Number(leaveType?.attachment_deadline_days) || 3;
     const attachmentDueDate = isUploadLater
       ? new Date(Date.now() + deadlineDays * 24 * 60 * 60 * 1000).toISOString()
