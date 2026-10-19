@@ -1469,6 +1469,15 @@ router.get('/stats/dashboard', (req, res) => {
 // -------------------------------------------------------------
 // LINE WEBHOOK & SIMULATOR
 // -------------------------------------------------------------
+export const recentWebhookEvents = [];
+
+router.get('/line/webhook-logs', (req, res) => {
+  res.json({
+    count: recentWebhookEvents.length,
+    events: recentWebhookEvents
+  });
+});
+
 router.post('/line/webhook', async (req, res) => {
   try {
     // 1. Verify LINE Signature
@@ -1490,26 +1499,55 @@ router.post('/line/webhook', async (req, res) => {
     const events = req.body.events || [];
     const db = getDb();
 
+    // Log incoming webhook event for live inspection & debugging
+    recentWebhookEvents.unshift({
+      time: new Date().toISOString(),
+      eventCount: events.length,
+      events: events.map(e => ({
+        type: e.type,
+        source: e.source,
+        message: e.message ? { type: e.message.type, text: e.message.text } : null,
+        postback: e.postback ? { data: e.postback.data } : null
+      }))
+    });
+    if (recentWebhookEvents.length > 30) recentWebhookEvents.pop();
+
+    // Helper function to reliably reply via Reply Token OR fallback to Push Message if token is expired/invalid
+    const replyOrPush = async (replyToken, lineUserId, flexOrMsg) => {
+      let sent = false;
+      if (replyToken) {
+        try {
+          const res = await sendLineReplyMessage(replyToken, flexOrMsg);
+          if (res && res.success) sent = true;
+        } catch (e) {
+          console.warn('[Reply Error, falling back to push]', e);
+        }
+      }
+      if (!sent && lineUserId) {
+        try {
+          await sendLinePushMessage(lineUserId, flexOrMsg);
+        } catch (e) {
+          console.error('[Push Fallback Error]', e);
+        }
+      }
+    };
+
     // Helper function to process leave approval and send notifications to both Approver and Doctor
     const processLeaveApproval = async (reqItem, approverLineUserId, replyToken, sourceComment = 'อนุมัติผ่าน LINE 1-Click') => {
       const doc = db.doctors.find(d => d.id === reqItem.doctor_id);
       const lt = db.leave_types.find(t => t.id === reqItem.leave_type_id);
 
       if (reqItem.status === 'APPROVED') {
-        if (replyToken) {
-          const receiptFlex = buildApproverReceiptFlex(reqItem, doc || {}, lt || {}, true);
-          await sendLineReplyMessage(replyToken, receiptFlex);
-        }
+        const receiptFlex = buildApproverReceiptFlex(reqItem, doc || {}, lt || {}, true);
+        await replyOrPush(replyToken, approverLineUserId, receiptFlex);
         return;
       }
 
       if (reqItem.status !== 'PENDING') {
-        if (replyToken) {
-          await sendLineReplyMessage(replyToken, {
-            type: 'text',
-            text: `⚠️ ใบลาเลขที่ ${reqItem.request_no} อยู่ในสถานะ "${reqItem.status}" จึงไม่สามารถอนุมัติซ้ำได้`
-          });
-        }
+        await replyOrPush(replyToken, approverLineUserId, {
+          type: 'text',
+          text: `⚠️ ใบลาเลขที่ ${reqItem.request_no} อยู่ในสถานะ "${reqItem.status}" จึงไม่สามารถอนุมัติซ้ำได้`
+        });
         return;
       }
 

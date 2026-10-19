@@ -43,6 +43,12 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 // API Routes
 app.use('/api', apiRoutes);
 
+// Direct webhook route fallback (in case Webhook URL is set to /line/webhook without /api)
+app.use('/line/webhook', (req, res, next) => {
+  req.url = '/line/webhook';
+  apiRoutes(req, res, next);
+});
+
 // In production, serve the frontend dist folder
 const distPath = path.join(__dirname, '..', 'dist');
 app.use(express.static(distPath));
