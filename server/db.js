@@ -381,6 +381,25 @@ const getInitialSeedData = () => {
       total_steps: 1,
       created_at: new Date(Date.now() - 3600000).toISOString(),
       updated_at: new Date(Date.now() - 3600000).toISOString()
+    },
+    {
+      id: '66125f71-d591-4e40-8e22-fd7282e78d38',
+      request_no: `LV-${currentYear}-00002`,
+      doctor_id: 'c0000000-0000-0000-0000-000000000003',
+      leave_type_id: '22222222-2222-2222-2222-222222222222',
+      start_date: todayStr,
+      end_date: todayStr,
+      duration_days: 0.5,
+      half_day_type: 'MORNING',
+      reason: 'สสส',
+      is_emergency: true,
+      is_exception: false,
+      upload_later: false,
+      status: 'PENDING',
+      current_step: 1,
+      total_steps: 1,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     }
   ];
 
