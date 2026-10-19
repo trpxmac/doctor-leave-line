@@ -610,9 +610,47 @@ router.get('/balances/:doctorId', (req, res) => {
 router.put('/balances/:doctorId', (req, res) => {
   const db = getDb();
   const doctorId = req.params.doctorId;
-  const { leave_type_id, entitlement_days, carried_over_days, fiscal_year } = req.body;
+  const { leave_type_id, entitlement_days, carried_over_days, fiscal_year, balances } = req.body;
   const year = fiscal_year || new Date().getFullYear();
 
+  // Support Batch Update from Admin UI
+  if (Array.isArray(balances)) {
+    const updated = [];
+    balances.forEach(item => {
+      if (!item.leave_type_id) return;
+      let bal = db.leave_balances.find(b => b.doctor_id === doctorId && b.leave_type_id === item.leave_type_id && b.fiscal_year === year);
+      const ent = parseFloat(item.entitlement_days);
+      const carry = parseFloat(item.carried_over_days) || 0;
+
+      if (!bal) {
+        if (!isNaN(ent)) {
+          bal = {
+            id: uuidv4(),
+            doctor_id: doctorId,
+            leave_type_id: item.leave_type_id,
+            fiscal_year: year,
+            entitlement_days: ent,
+            carried_over_days: carry,
+            used_days: 0,
+            pending_days: 0,
+            updated_at: new Date().toISOString()
+          };
+          db.leave_balances.push(bal);
+          updated.push(bal);
+        }
+      } else {
+        if (!isNaN(ent)) bal.entitlement_days = ent;
+        if (!isNaN(carry)) bal.carried_over_days = carry;
+        bal.updated_at = new Date().toISOString();
+        updated.push(bal);
+      }
+    });
+
+    saveStore();
+    return res.json({ message: 'Balances updated successfully', balances: updated });
+  }
+
+  // Single balance update
   let bal = db.leave_balances.find(b => b.doctor_id === doctorId && b.leave_type_id === leave_type_id && b.fiscal_year === year);
   if (!bal) {
     bal = {

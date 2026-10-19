@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Layers,
   Settings,
+  Sliders,
   ArrowRight,
   UserCheck,
   Clock,
@@ -87,11 +88,98 @@ export default function AdminMasterDataPage() {
   });
   const [contactLoading, setContactLoading] = useState(false);
 
+  // Doctor Quota Modal State
+  const [quotaModalOpen, setQuotaModalOpen] = useState(false);
+  const [selectedDoctorForQuota, setSelectedDoctorForQuota] = useState(null);
+  const [doctorQuotaList, setDoctorQuotaList] = useState([]);
+  const [savingQuota, setSavingQuota] = useState(false);
+  const currentFiscalYear = new Date().getFullYear();
+
   // Toast
   const [toastMessage, setToastMessage] = useState({ type: '', text: '' });
   const showToast = (text, type = 'success') => {
     setToastMessage({ type, text });
     setTimeout(() => setToastMessage({ type: '', text: '' }), 3500);
+  };
+
+  // Quota Handlers
+  const handleOpenQuotaModal = async (doc) => {
+    setSelectedDoctorForQuota(doc);
+    try {
+      const res = await fetch(`/api/balances/${doc.id}`);
+      const balances = res.ok ? await res.json() : [];
+
+      const activeTypes = leaveTypes.filter(lt => {
+        if (doc.doctor_type === 'PART_TIME') return !lt.is_full_time_only;
+        return true;
+      });
+
+      const initialList = activeTypes.map(lt => {
+        const existing = balances.find(b => b.leave_type_id === lt.id);
+        return {
+          leave_type_id: lt.id,
+          leave_type_code: lt.code,
+          leave_type_name: lt.name_th,
+          color: lt.color || '#006699',
+          entitlement_days: existing !== undefined ? existing.entitlement_days : '',
+          carried_over_days: existing !== undefined ? existing.carried_over_days : 0,
+          used_days: existing ? existing.used_days : 0,
+          pending_days: existing ? existing.pending_days : 0,
+          has_quota: existing !== undefined
+        };
+      });
+
+      setDoctorQuotaList(initialList);
+      setQuotaModalOpen(true);
+    } catch (err) {
+      showToast('ไม่สามารถดึงข้อมูลโควตาวันลาได้', 'error');
+    }
+  };
+
+  const handleApplyPreset = () => {
+    setDoctorQuotaList(prev => prev.map(item => {
+      let ent = item.entitlement_days;
+      if (item.leave_type_code === 'VACATION') ent = 10;
+      else if (item.leave_type_code === 'SICK') ent = 30;
+      else if (item.leave_type_code === 'PERSONAL') ent = 5;
+      else if (item.leave_type_code === 'TRAINING') ent = 10;
+      else if (item.leave_type_code === 'UNPAID') ent = '';
+      return {
+        ...item,
+        entitlement_days: ent,
+        has_quota: ent !== ''
+      };
+    }));
+    showToast('ปรับใช้ค่าโควตามาตรฐานแล้ว (อย่าลืมกดบันทึก)');
+  };
+
+  const handleSaveQuota = async (e) => {
+    e.preventDefault();
+    if (!selectedDoctorForQuota) return;
+    setSavingQuota(true);
+    try {
+      const payload = doctorQuotaList
+        .filter(item => item.entitlement_days !== '' && !isNaN(Number(item.entitlement_days)))
+        .map(item => ({
+          leave_type_id: item.leave_type_id,
+          entitlement_days: Number(item.entitlement_days),
+          carried_over_days: Number(item.carried_over_days) || 0
+        }));
+
+      const res = await fetch(`/api/balances/${selectedDoctorForQuota.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ balances: payload, fiscal_year: currentFiscalYear })
+      });
+
+      if (!res.ok) throw new Error((await res.json()).error || 'เกิดข้อผิดพลาดในการบันทึก');
+      showToast(`บันทึกโควตาวันลาของ ${selectedDoctorForQuota.prefix_th}${selectedDoctorForQuota.first_name_th} สำเร็จ`);
+      setQuotaModalOpen(false);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setSavingQuota(false);
+    }
   };
 
   const fetchInitialData = async () => {
@@ -818,27 +906,38 @@ export default function AdminMasterDataPage() {
                             {doc.phone || '-'}
                           </td>
                           <td className="py-3 px-4 text-right">
-                            {isLinked ? (
+                            <div className="flex items-center justify-end gap-1.5">
                               <button
-                                onClick={() => handleUnlinkDoctorLine(doc.id, `${doc.prefix_th}${doc.first_name_th}`)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 text-[11px] font-semibold transition-colors"
-                                title="ยกเลิกการผูกเพื่ออนุญาตให้แพทย์ผูก LINE ใหม่ได้"
+                                onClick={() => handleOpenQuotaModal(doc)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-sky-200 text-[#006699] hover:bg-sky-50 text-[11px] font-semibold transition-colors shadow-2xs"
+                                title="ตั้งค่า/แก้ไขโควตาวันลาประจำปีของแพทย์ท่านนี้"
                               >
-                                <UserX className="w-3 h-3" />
-                                <span>ปลดการผูก</span>
+                                <Sliders className="w-3 h-3" />
+                                <span>ตั้งค่าโควตา</span>
                               </button>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(window.location.origin);
-                                  showToast('คัดลอกลิงก์หน้าลงทะเบียนเข้าใช้งานให้แพทย์แล้ว');
-                                }}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 text-[11px] font-medium transition-colors"
-                              >
-                                <Copy className="w-3 h-3" />
-                                <span>คัดลอกลิงก์</span>
-                              </button>
-                            )}
+
+                              {isLinked ? (
+                                <button
+                                  onClick={() => handleUnlinkDoctorLine(doc.id, `${doc.prefix_th}${doc.first_name_th}`)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 text-[11px] font-semibold transition-colors"
+                                  title="ยกเลิกการผูกเพื่ออนุญาตให้แพทย์ผูก LINE ใหม่ได้"
+                                >
+                                  <UserX className="w-3 h-3" />
+                                  <span>ปลด LINE</span>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(window.location.origin);
+                                    showToast('คัดลอกลิงก์หน้าลงทะเบียนเข้าใช้งานให้แพทย์แล้ว');
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 text-[11px] font-medium transition-colors"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                  <span>คัดลอกลิงก์</span>
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1379,6 +1478,175 @@ export default function AdminMasterDataPage() {
                 >
                   บันทึกข้อมูล
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL 4: MANAGE DOCTOR LEAVE QUOTAS                       */}
+      {/* ========================================================= */}
+      {quotaModalOpen && selectedDoctorForQuota && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="bg-slate-50 px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-[#006699]" />
+                  <span>จัดการโควตาสิทธิ์วันลาประจำปี ({currentFiscalYear})</span>
+                </h2>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  แพทย์: <strong className="text-slate-700">{selectedDoctorForQuota.prefix_th}{selectedDoctorForQuota.first_name_th} {selectedDoctorForQuota.last_name_th}</strong> 
+                  <span className="font-mono text-slate-400 ml-1">({selectedDoctorForQuota.employee_id} • {selectedDoctorForQuota.doctor_type === 'FULL_TIME' ? 'แพทย์ประจำ' : 'พาร์ทไทม์'})</span>
+                </p>
+              </div>
+              <button 
+                onClick={() => setQuotaModalOpen(false)} 
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200/60"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick Actions Bar */}
+            <div className="bg-sky-50/60 px-5 py-2.5 border-b border-sky-100 flex items-center justify-between text-xs flex-wrap gap-2">
+              <span className="text-sky-900 font-medium text-[11px]">
+                💡 ช่องว่าง = ไม่กำหนดโควตา (จะแสดงเป็น "ตามเกณฑ์ รพ." หรือ "ไม่จำกัดสิทธิ์")
+              </span>
+              <button
+                type="button"
+                onClick={handleApplyPreset}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-sky-50 text-[#006699] border border-sky-200 rounded-lg font-bold text-[11px] shadow-2xs"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                <span>ใส่ค่ามาตรฐาน (พักผ่อน 10, ป่วย 30, กิจ 5, อบรม 10)</span>
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSaveQuota} className="p-5 space-y-4">
+              <div className="overflow-x-auto max-h-[380px] overflow-y-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="py-2.5 px-3">ประเภทการลา</th>
+                      <th className="py-2.5 px-3 text-center w-28">โควตาประจำปี (วัน)</th>
+                      <th className="py-2.5 px-3 text-center w-24">ยกยอดมา (วัน)</th>
+                      <th className="py-2.5 px-3 text-center">ใช้ไปแล้ว</th>
+                      <th className="py-2.5 px-3 text-right">คงเหลือสุทธิ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {doctorQuotaList.map((item, idx) => {
+                      const ent = item.entitlement_days === '' ? null : Number(item.entitlement_days);
+                      const carry = Number(item.carried_over_days) || 0;
+                      const used = Number(item.used_days) || 0;
+                      const pending = Number(item.pending_days) || 0;
+                      const hasQ = ent !== null && !isNaN(ent);
+                      const remaining = hasQ ? Math.max(0, ent + carry - used - pending) : null;
+
+                      return (
+                        <tr key={item.leave_type_id} className="hover:bg-slate-50/50">
+                          <td className="py-2.5 px-3">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="w-2.5 h-2.5 rounded-full shrink-0"
+                                style={{ backgroundColor: item.color }}
+                              />
+                              <span className="font-bold text-slate-800">{item.leave_type_name}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">({item.leave_type_code})</span>
+                            </div>
+                          </td>
+
+                          {/* Entitlement Days */}
+                          <td className="py-2 px-3 text-center">
+                            <input
+                              type="number"
+                              step="0.5"
+                              min="0"
+                              placeholder="ไม่กำหนด"
+                              value={item.entitlement_days}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setDoctorQuotaList(prev => prev.map((q, i) => i === idx ? { ...q, entitlement_days: val } : q));
+                              }}
+                              className="w-24 text-center py-1 px-2 rounded-lg border border-slate-200 font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#006699]"
+                            />
+                          </td>
+
+                          {/* Carried Over Days */}
+                          <td className="py-2 px-3 text-center">
+                            <input
+                              type="number"
+                              step="0.5"
+                              min="0"
+                              value={item.carried_over_days}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setDoctorQuotaList(prev => prev.map((q, i) => i === idx ? { ...q, carried_over_days: val } : q));
+                              }}
+                              disabled={!hasQ}
+                              className="w-20 text-center py-1 px-2 rounded-lg border border-slate-200 text-slate-700 disabled:opacity-40 disabled:bg-slate-100 focus:bg-white focus:ring-2 focus:ring-[#006699]"
+                            />
+                          </td>
+
+                          {/* Used Days */}
+                          <td className="py-2.5 px-3 text-center text-slate-500 font-mono">
+                            {used} {pending > 0 && <span className="text-amber-600 font-sans text-[10px]">(รอ {pending})</span>}
+                          </td>
+
+                          {/* Remaining */}
+                          <td className="py-2.5 px-3 text-right">
+                            {hasQ ? (
+                              <span className="font-extrabold text-[#006699] text-xs">
+                                เหลือ {remaining} วัน
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-[10px]">
+                                {item.leave_type_code === 'UNPAID' ? 'ไม่จำกัดสิทธิ์' : 'ตามเกณฑ์ รพ.'}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-[11px] text-slate-400">
+                  ระบบจะอัปเดตสิทธิ์ให้แพทย์ทันทีแบบ Real-time
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setQuotaModalOpen(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold text-xs"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingQuota}
+                    className="px-5 py-2 rounded-xl bg-[#006699] hover:bg-[#005580] text-white font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {savingQuota ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>กำลังบันทึก...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>บันทึกโควตา</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

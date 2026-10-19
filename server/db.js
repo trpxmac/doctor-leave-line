@@ -354,6 +354,73 @@ const getInitialSeedData = () => {
       used_days: 0.0,
       pending_days: 0.0,
       updated_at: new Date().toISOString()
+    },
+    {
+      id: '00000000-0000-0000-0000-000000001013',
+      doctor_id: 'c0000000-0000-0000-0000-000000000002',
+      leave_type_id: '33333333-3333-3333-3333-333333333333',
+      fiscal_year: currentYear,
+      entitlement_days: 5.0,
+      carried_over_days: 0.0,
+      used_days: 0.0,
+      pending_days: 0.0,
+      updated_at: new Date().toISOString()
+    },
+    {
+      id: '00000000-0000-0000-0000-000000001014',
+      doctor_id: 'c0000000-0000-0000-0000-000000000002',
+      leave_type_id: '44444444-4444-4444-4444-444444444444',
+      fiscal_year: currentYear,
+      entitlement_days: 10.0,
+      carried_over_days: 0.0,
+      used_days: 0.0,
+      pending_days: 0.0,
+      updated_at: new Date().toISOString()
+    },
+    // Khun Sirimas (P'Koong, FT - Admin)
+    {
+      id: '00000000-0000-0000-0000-000000001015',
+      doctor_id: 'c0000000-0000-0000-0000-000000000001',
+      leave_type_id: '11111111-1111-1111-1111-111111111111',
+      fiscal_year: currentYear,
+      entitlement_days: 12.0,
+      carried_over_days: 0.0,
+      used_days: 0.0,
+      pending_days: 0.0,
+      updated_at: new Date().toISOString()
+    },
+    {
+      id: '00000000-0000-0000-0000-000000001016',
+      doctor_id: 'c0000000-0000-0000-0000-000000000001',
+      leave_type_id: '22222222-2222-2222-2222-222222222222',
+      fiscal_year: currentYear,
+      entitlement_days: 30.0,
+      carried_over_days: 0.0,
+      used_days: 0.0,
+      pending_days: 0.0,
+      updated_at: new Date().toISOString()
+    },
+    {
+      id: '00000000-0000-0000-0000-000000001017',
+      doctor_id: 'c0000000-0000-0000-0000-000000000001',
+      leave_type_id: '33333333-3333-3333-3333-333333333333',
+      fiscal_year: currentYear,
+      entitlement_days: 5.0,
+      carried_over_days: 0.0,
+      used_days: 0.0,
+      pending_days: 0.0,
+      updated_at: new Date().toISOString()
+    },
+    {
+      id: '00000000-0000-0000-0000-000000001018',
+      doctor_id: 'c0000000-0000-0000-0000-000000000001',
+      leave_type_id: '44444444-4444-4444-4444-444444444444',
+      fiscal_year: currentYear,
+      entitlement_days: 10.0,
+      carried_over_days: 0.0,
+      used_days: 0.0,
+      pending_days: 0.0,
+      updated_at: new Date().toISOString()
     }
   ];
 
