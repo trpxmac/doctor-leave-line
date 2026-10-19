@@ -11,7 +11,6 @@ import {
   Check,
   Info,
   Send,
-  Sparkles,
   ChevronRight,
   ShieldCheck,
   ShieldAlert,
@@ -373,95 +372,7 @@ export default function DoctorLiffPage() {
 
 
 
-        {/* Section 1: Doctor Leave Balances Carousel / Grid */}
-        <div className="p-4 bg-slate-50/70 border-b border-slate-200">
-          <div className="flex items-center justify-between mb-2.5">
-            <div>
-              <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-sky-600" />
-                สิทธิ์วันลาคงเหลือประจำปี ({new Date().getFullYear()})
-              </h2>
-              <p className="text-[10px] text-slate-400 mt-0.5">
-                สรุปโควตาคงเหลือของท่าน (ดูข้อมูลอย่างเดียว ไม่สามารถกดได้)
-              </p>
-            </div>
-            <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
-              อัปเดตแบบ Real-time
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {balances.length === 0 ? (
-              <div className="col-span-full text-center py-3 text-xs text-slate-400">
-                {currentDoctor.doctor_type === 'PART_TIME'
-                  ? 'แพทย์พาร์ทไทม์ไม่มีโควตาวันลาพักร้อน (ยื่นลาไม่รับค่าตอบแทนได้ตามจริง)'
-                  : 'กำลังโหลดสิทธิ์คงเหลือ...'}
-              </div>
-            ) : (
-              balances.map(b => {
-                const isSelectedBal = selectedType?.id === b.leave_type_id;
-                const orig = Number(b.remaining_days);
-                const after = isSelectedBal ? Math.max(0, orig - activeDuration) : orig;
-
-                return (
-                  <div
-                    key={b.id}
-                    className={`p-3 rounded-2xl border transition-colors cursor-default select-none pointer-events-none ${isSelectedBal
-                        ? 'bg-sky-50/80 border-sky-300 ring-2 ring-[#006699]/30 shadow-xs'
-                        : 'bg-white/95 border-slate-200/80 shadow-2xs'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="text-[11px] font-bold text-slate-700 truncate">
-                        {b.leave_type_name}
-                      </div>
-                      {isSelectedBal && (
-                        <span className="text-[9px] font-bold bg-[#006699] text-white px-1.5 py-0.2 rounded-full">
-                          เลือกอยู่
-                        </span>
-                      )}
-                    </div>
-                    
-                    <div className="mt-1 flex items-baseline justify-between">
-                      {isSelectedBal && activeDuration > 0 ? (
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-xs font-bold text-slate-400 line-through">
-                            {orig}
-                          </span>
-                          <span className="text-lg font-extrabold text-emerald-600">
-                            {after}
-                          </span>
-                          <span className="text-[10px] font-bold text-rose-500">
-                            (-{activeDuration})
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-lg font-bold text-[#006699]">
-                          {orig}
-                        </span>
-                      )}
-                      <span className="text-[10px] text-slate-400">
-                        / {b.total_quota} วัน
-                      </span>
-                    </div>
-
-                    {isSelectedBal && activeDuration > 0 ? (
-                      <div className="text-[9px] text-emerald-700 font-semibold mt-0.5 flex items-center gap-1">
-                        <span>หลังลาเหลือ {after} วัน</span>
-                      </div>
-                    ) : b.pending_days > 0 ? (
-                      <div className="text-[9px] text-amber-600 font-medium mt-0.5">
-                        (รออนุมัติ {b.pending_days} วัน)
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Section 2: Form */}
+        {/* Leave Request Form */}
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
 
           {/* Error Message */}
