@@ -462,6 +462,7 @@ router.post('/leave-types', (req, res) => {
     allows_half_day = true,
     requires_attachment = false,
     attachment_threshold_days = 2.0,
+    attachment_deadline_days = 3,
     min_notice_days = 0,
     max_days_per_request,
     allows_backdate = false,
@@ -489,6 +490,7 @@ router.post('/leave-types', (req, res) => {
     allows_half_day: Boolean(allows_half_day),
     requires_attachment: Boolean(requires_attachment),
     attachment_threshold_days: Number(attachment_threshold_days) || 0,
+    attachment_deadline_days: Number(attachment_deadline_days) || 3,
     min_notice_days: Number(min_notice_days) || 0,
     max_days_per_request: max_days_per_request ? Number(max_days_per_request) : null,
     allows_backdate: Boolean(allows_backdate),
@@ -533,6 +535,7 @@ router.put('/leave-types/:id', (req, res) => {
   if (updates.allows_half_day !== undefined) db.leave_types[index].allows_half_day = Boolean(updates.allows_half_day);
   if (updates.requires_attachment !== undefined) db.leave_types[index].requires_attachment = Boolean(updates.requires_attachment);
   if (updates.attachment_threshold_days !== undefined) db.leave_types[index].attachment_threshold_days = Number(updates.attachment_threshold_days);
+  if (updates.attachment_deadline_days !== undefined) db.leave_types[index].attachment_deadline_days = Number(updates.attachment_deadline_days);
   if (updates.min_notice_days !== undefined) db.leave_types[index].min_notice_days = Number(updates.min_notice_days);
   if (updates.allows_backdate !== undefined) db.leave_types[index].allows_backdate = Boolean(updates.allows_backdate);
   if (updates.is_full_time_only !== undefined) db.leave_types[index].is_full_time_only = Boolean(updates.is_full_time_only);
@@ -988,6 +991,13 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     const countThisYear = db.leave_requests.filter(r => r.request_no && r.request_no.includes(`LV-${currentYear}`)).length + 1;
     const requestNo = `LV-${currentYear}-${String(countThisYear).padStart(5, '0')}`;
 
+    const isUploadLater = upload_later === 'true' || upload_later === true;
+    const leaveType = db.leave_types.find(lt => lt.id === leave_type_id);
+    const deadlineDays = Number(leaveType?.attachment_deadline_days) || 3;
+    const attachmentDueDate = isUploadLater
+      ? new Date(Date.now() + deadlineDays * 24 * 60 * 60 * 1000).toISOString()
+      : null;
+
     const newRequest = {
       id: uuidv4(),
       request_no: requestNo,
@@ -1000,7 +1010,8 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
       reason: sanitizeInput(reason),
       is_emergency: isEmergency,
       is_exception: isException,
-      upload_later: upload_later === 'true' || upload_later === true,
+      upload_later: isUploadLater,
+      attachment_due_date: attachmentDueDate,
       substitute_doctor_id: substitute_doctor_id || null,
       substitute_doctor_name: substituteDoctorName,
       duty_handover_notes: duty_handover_notes ? sanitizeInput(duty_handover_notes) : null,
@@ -1072,6 +1083,10 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     });
 
     saveStore();
+
+    // -------------------------------------------------------------
+    // POST /api/requests/:id/attachments - Late attachment upload
+    // -------------------------------------------------------------
 
     // -------------------------------------------------------------
     // LINE NOTIFICATIONS (1-on-1 Flex Messages)
@@ -1190,6 +1205,57 @@ router.post('/leave-requests/:id/cancel', async (req, res) => {
   } catch (err) {
     console.error('Cancel Error:', err);
     res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// -------------------------------------------------------------
+// POST /leave-requests/:id/attachments - Late Attachment Upload
+// -------------------------------------------------------------
+router.post('/leave-requests/:id/attachments', handleUpload, async (req, res) => {
+  try {
+    const db = getDb();
+    const request = db.leave_requests.find(r => r.id === req.params.id);
+    if (!request) return res.status(404).json({ error: 'ไม่พบใบลาที่ระบุ' });
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'กรุณาเลือกไฟล์เอกสารที่ต้องการแนบ' });
+    }
+
+    const added = [];
+    req.files.forEach(f => {
+      const att = {
+        id: uuidv4(),
+        request_id: request.id,
+        file_name: f.originalname,
+        storage_path: `/uploads/${f.filename}`,
+        file_size_bytes: f.size,
+        mime_type: f.mimetype,
+        uploaded_at: new Date().toISOString()
+      };
+      db.leave_attachments.push(att);
+      added.push(att);
+    });
+
+    request.upload_later = false;
+    request.updated_at = new Date().toISOString();
+
+    // Audit Log
+    db.audit_logs.push({
+      id: uuidv4(),
+      table_name: 'leave_attachments',
+      record_id: request.id,
+      action: 'LATE_ATTACHMENT_UPLOAD',
+      actor_id: request.doctor_id,
+      new_data: { file_count: added.length, files: added.map(a => a.file_name) },
+      ip_address: req.ip || '127.0.0.1',
+      created_at: new Date().toISOString()
+    });
+
+    saveStore();
+    res.json({ success: true, message: 'แนบเอกสารย้อนหลังสำเร็จ', attachments: added, request });
+  } catch (err) {
+    console.error('Late Attachment Upload Error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 

@@ -694,8 +694,16 @@ export default function DoctorLiffPage() {
                 <Paperclip className="w-3.5 h-3.5 text-slate-500" />
                 5. แนบเอกสารประกอบ (ใบรับรองแพทย์ / หนังสือเชิญ)
               </label>
-              {selectedType?.requires_attachment && (
-                <span className="text-[10px] text-rose-600 font-semibold">จำเป็นตามระเบียบ</span>
+              {selectedType?.requires_attachment ? (
+                <span className="text-[10px] text-rose-600 font-semibold">
+                  {selectedType.attachment_threshold_days > 0 
+                    ? `จำเป็นเมื่อลาเกิน ${selectedType.attachment_threshold_days} วัน`
+                    : 'จำเป็นตามระเบียบ'}
+                </span>
+              ) : (
+                <span className="text-[10px] text-slate-400 font-medium">
+                  (ไม่บังคับสำหรับ{selectedType?.name_th || 'ประเภทนี้'})
+                </span>
               )}
             </div>
 
@@ -709,21 +717,25 @@ export default function DoctorLiffPage() {
               />
             )}
 
-            {/* Checkbox: แนบเอกสารตามหลังภายใน 3 วัน */}
-            <label className="flex items-center gap-2 cursor-pointer pt-1">
-              <input
-                type="checkbox"
-                checked={uploadLater}
-                onChange={(e) => setUploadLater(e.target.checked)}
-                className="w-4 h-4 rounded text-[#006699] focus:ring-sky-400"
-              />
-              <span className="text-xs text-slate-700 font-medium">
-                สะดวกแนบเอกสารตามหลัง (ภายใน 3 วัน)
-              </span>
-            </label>
-            <p className="text-[10px] text-slate-400 italic">
-              * ฟังก์ชันอำนวยความสะดวกสำหรับแพทย์ขณะใช้งานบนมือถือ ระบบจะส่ง LINE Reminder เตือนในภายหลัง
-            </p>
+            {/* Checkbox: แนบเอกสารตามหลัง (เปลี่ยนจำนวนวันตามประเภทการลาที่ตั้งค่าไว้) */}
+            {selectedType?.requires_attachment && (
+              <>
+                <label className="flex items-center gap-2 cursor-pointer pt-1">
+                  <input
+                    type="checkbox"
+                    checked={uploadLater}
+                    onChange={(e) => setUploadLater(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#006699] focus:ring-sky-400"
+                  />
+                  <span className="text-xs text-slate-700 font-medium">
+                    สะดวกแนบเอกสารตามหลัง (ภายใน {selectedType?.attachment_deadline_days || 3} วัน)
+                  </span>
+                </label>
+                <p className="text-[10px] text-slate-400 italic">
+                  * ฟังก์ชันอำนวยความสะดวกสำหรับแพทย์ขณะใช้งานบนมือถือ ระบบจะส่ง LINE Reminder เตือนในภายหลัง
+                </p>
+              </>
+            )}
           </div>
 
           {/* Submit Button */}

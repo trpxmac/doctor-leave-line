@@ -66,6 +66,7 @@ export default function AdminMasterDataPage() {
     allows_half_day: true,
     requires_attachment: false,
     attachment_threshold_days: 2.0,
+    attachment_deadline_days: 3,
     min_notice_days: 0,
     allows_backdate: false,
     is_full_time_only: false,
@@ -364,6 +365,7 @@ export default function AdminMasterDataPage() {
       allows_half_day: true,
       requires_attachment: false,
       attachment_threshold_days: 2.0,
+      attachment_deadline_days: 3,
       min_notice_days: 0,
       allows_backdate: false,
       is_full_time_only: false,
@@ -382,6 +384,7 @@ export default function AdminMasterDataPage() {
       allows_half_day: lt.allows_half_day !== false,
       requires_attachment: Boolean(lt.requires_attachment),
       attachment_threshold_days: lt.attachment_threshold_days || 0,
+      attachment_deadline_days: lt.attachment_deadline_days || 3,
       min_notice_days: lt.min_notice_days || 0,
       allows_backdate: Boolean(lt.allows_backdate),
       is_full_time_only: Boolean(lt.is_full_time_only),
@@ -757,6 +760,15 @@ export default function AdminMasterDataPage() {
                           : 'ไม่บังคับ'}
                       </span>
                     </div>
+
+                    {lt.requires_attachment && (
+                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                        <span className="text-[11px] text-slate-500">แนบตามหลังได้:</span>
+                        <span className="font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                          ภายใน {lt.attachment_deadline_days || 3} วัน
+                        </span>
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
                       <span className="text-[11px] text-slate-500">ลาย้อนหลังได้:</span>
@@ -1452,6 +1464,38 @@ export default function AdminMasterDataPage() {
                   />
                   <span className="font-semibold text-slate-700">บังคับแนบเอกสาร (ใบรับรองแพทย์ / หนังสือเชิญ)</span>
                 </label>
+
+                {typeForm.requires_attachment && (
+                  <div className="pl-6 grid grid-cols-2 gap-3 pt-1 animate-in fade-in">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        แนบเมื่อลาตั้งแต่ (วันขึ้นไป)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={typeForm.attachment_threshold_days}
+                        onChange={(e) => setTypeForm({ ...typeForm, attachment_threshold_days: parseFloat(e.target.value) || 0 })}
+                        placeholder="0 = แนบทุกกรณี"
+                        className="w-full p-2 rounded-lg border border-slate-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        อนุญาตให้แนบตามหลังได้ภายใน (วัน)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={typeForm.attachment_deadline_days ?? 3}
+                        onChange={(e) => setTypeForm({ ...typeForm, attachment_deadline_days: parseInt(e.target.value, 10) || 3 })}
+                        placeholder="เช่น 3, 7, 14"
+                        className="w-full p-2 rounded-lg border border-slate-300 font-bold text-[#006699]"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input

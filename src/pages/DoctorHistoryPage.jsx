@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   Calendar,
@@ -13,15 +13,25 @@ import {
   FileText,
   Sparkles,
   ArrowRight,
-  ShieldAlert
+  ShieldAlert,
+  X,
+  Check
 } from 'lucide-react';
 
 export default function DoctorHistoryPage() {
   const { currentDoctor } = useAuth();
+  const location = useLocation();
   const [requests, setRequests] = useState([]);
   const [balances, setBalances] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // Late Upload Modal State
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [selectedReqForUpload, setSelectedReqForUpload] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [toastSuccess, setToastSuccess] = useState('');
 
   const fetchHistoryAndBalances = async () => {
     if (!currentDoctor) return;
@@ -43,6 +53,46 @@ export default function DoctorHistoryPage() {
   useEffect(() => {
     fetchHistoryAndBalances();
   }, [currentDoctor]);
+
+  // Handle direct uploadId from LINE reminder link
+  useEffect(() => {
+    if (requests.length === 0) return;
+    const params = new URLSearchParams(location.search);
+    const uploadId = params.get('uploadId');
+    if (uploadId) {
+      const target = requests.find(r => r.id === uploadId);
+      if (target && target.upload_later) {
+        setSelectedReqForUpload(target);
+        setUploadModalOpen(true);
+      }
+    }
+  }, [requests, location.search]);
+
+  const handleLateUpload = async (e) => {
+    e.preventDefault();
+    if (!selectedReqForUpload || selectedFiles.length === 0) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      for (let i = 0; i < selectedFiles.length; i++) {
+        formData.append('attachments', selectedFiles[i]);
+      }
+      const res = await fetch(`/api/leave-requests/${selectedReqForUpload.id}/attachments`, {
+        method: 'POST',
+        body: formData
+      });
+      if (!res.ok) throw new Error((await res.json()).error || 'ไม่สามารถอัปโหลดไฟล์ได้');
+      setToastSuccess(`แนบเอกสารสำหรับใบลา ${selectedReqForUpload.request_no} เรียบร้อยแล้ว`);
+      setUploadModalOpen(false);
+      setSelectedFiles([]);
+      fetchHistoryAndBalances();
+      setTimeout(() => setToastSuccess(''), 4000);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleCancel = async (requestId) => {
     if (!window.confirm('คุณต้องการยกเลิกคำขอการลานี้ใช่หรือไม่? ระบบจะทำการคืนสิทธิ์วันลาให้ทันที')) {
@@ -324,18 +374,31 @@ export default function DoctorHistoryPage() {
 
                 {/* Attachments / Upload later info */}
                 <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                  <div className="flex items-center gap-2 text-[11px] text-slate-500 flex-wrap">
                     {req.upload_later ? (
-                      <span className="text-amber-600 font-medium">
-                        ⏳ เลือกแนบเอกสารตามหลัง (ภายใน 3 วัน)
-                      </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          ⏳ รอแนบเอกสาร (กำหนด: {req.attachment_due_date ? new Date(req.attachment_due_date).toLocaleDateString('th-TH') : 'ภายใน 3 วัน'})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedReqForUpload(req);
+                            setUploadModalOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#006699] hover:bg-[#005580] text-white font-bold text-[11px] shadow-xs transition-all"
+                        >
+                          <Paperclip className="w-3 h-3" />
+                          <span>แนบเอกสารตอนนี้</span>
+                        </button>
+                      </div>
                     ) : req.attachments && req.attachments.length > 0 ? (
-                      <span className="flex items-center gap-1 text-sky-600 font-medium">
-                        <Paperclip className="w-3.5 h-3.5" />
+                      <span className="flex items-center gap-1 text-sky-700 font-semibold bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                        <Paperclip className="w-3.5 h-3.5 text-[#006699]" />
                         แนบเอกสารแล้ว ({req.attachments.length} ไฟล์)
                       </span>
                     ) : (
-                      <span>ไม่มีเอกสารแนบ</span>
+                      <span className="text-slate-400">ไม่มีเอกสารแนบ</span>
                     )}
                   </div>
 
@@ -361,6 +424,72 @@ export default function DoctorHistoryPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastSuccess && (
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-bottom-2">
+          <Check className="w-4 h-4" />
+          <span>{toastSuccess}</span>
+        </div>
+      )}
+
+      {/* Late Attachment Upload Modal */}
+      {uploadModalOpen && selectedReqForUpload && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="bg-slate-50 px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <Paperclip className="w-4 h-4 text-[#006699]" />
+                  <span>แนบเอกสารย้อนหลัง</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  ใบลาเลขที่ <strong className="font-mono text-slate-700">{selectedReqForUpload.request_no}</strong> ({selectedReqForUpload.leave_type_name || 'ใบลา'})
+                </p>
+              </div>
+              <button onClick={() => setUploadModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleLateUpload} className="p-5 space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  เลือกไฟล์เอกสาร (ใบรับรองแพทย์ / หนังสือเชิญ)
+                </label>
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,image/png,image/jpeg"
+                  onChange={(e) => setSelectedFiles(Array.from(e.target.files))}
+                  className="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-sky-100 file:text-[#006699] hover:file:bg-sky-200"
+                  required
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  รองรับไฟล์รูปภาพ JPG, PNG และ PDF (สูงสุด 3 ไฟล์)
+                </p>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUploadModalOpen(false)}
+                  className="px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploading || selectedFiles.length === 0}
+                  className="px-4 py-2 rounded-xl bg-[#006699] hover:bg-[#005580] text-white font-bold transition-all disabled:opacity-50"
+                >
+                  {uploading ? 'กำลังอัปโหลด...' : 'ยืนยันอัปโหลดเอกสาร'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
