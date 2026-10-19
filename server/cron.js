@@ -3,7 +3,7 @@ import { getDb, saveStore } from './db.js';
 import { sendLinePushMessage } from './line.js';
 
 // Build a simple text-based Flex or Bubble for reminder
-function buildReminderFlex(request, doc, leaveType, hours) {
+export function buildReminderFlex(request, doc, leaveType, hours) {
   const flex = {
     type: "bubble",
     size: "mega",
@@ -48,7 +48,7 @@ function buildReminderFlex(request, doc, leaveType, hours) {
           action: {
             type: "uri",
             label: "เปิดศูนย์อนุมัติ",
-            uri: `${process.env.APP_URL || 'http://localhost:5173'}/approver`
+            uri: `https://liff.line.me/${process.env.VITE_LIFF_ID || process.env.LIFF_ID || '2011832574-WtcSrDre'}/approver`
           }
         }
       ]

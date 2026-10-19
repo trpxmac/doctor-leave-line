@@ -195,7 +195,7 @@ export default function OnboardingPage() {
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="พิมพ์ชื่อคุณหมอ เช่น 'ปารวี' หรือเบอร์โทร..."
+                      placeholder="พิมพ์ชื่อแพทย์, เลข ว. (เช่น 48921) หรือเบอร์โทร..."
                       className="w-full pl-9 pr-9 py-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-800 focus:bg-white focus:border-[#006699] focus:ring-2 focus:ring-[#006699]/10 outline-none transition-all placeholder:text-slate-400 font-medium"
                     />
                     {searchQuery && (
@@ -270,6 +270,11 @@ export default function OnboardingPage() {
                                 }`}>
                                   {doc.doctor_type === 'FULL_TIME' ? 'ประจำ (FT)' : 'พาร์ทไทม์ (PT)'}
                                 </span>
+                                {doc.license_no && (
+                                  <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded font-mono">
+                                    {doc.license_no}
+                                  </span>
+                                )}
                                 {doc.phone_masked && doc.phone_masked !== '-' && (
                                   <span className="text-[10px] text-slate-400 font-mono">
                                     {doc.phone_masked}
@@ -398,8 +403,8 @@ export default function OnboardingPage() {
                   <div className="text-xs text-slate-500 mt-0.5">
                     แผนก: <strong>{selectedDoctor.department_name}</strong>
                   </div>
-                  <div className="text-[10px] text-[#006699] font-semibold mt-0.5">
-                    รหัส: {selectedDoctor.employee_id}
+                  <div className="text-[10px] text-[#006699] font-semibold mt-0.5 font-mono">
+                    รหัส: {selectedDoctor.employee_id} {selectedDoctor.license_no ? `• ${selectedDoctor.license_no}` : ''}
                   </div>
                 </div>
               </div>

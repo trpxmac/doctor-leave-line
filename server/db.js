@@ -191,6 +191,7 @@ const getInitialSeedData = () => {
     {
       id: 'c0000000-0000-0000-0000-000000000001',
       employee_id: 'EMP-KOONG',
+      license_no: null,
       line_user_id: 'U_KOONG_LINE_ADMIN',
       prefix_th: 'คุณ',
       first_name_th: 'สิริมาศ',
@@ -207,6 +208,7 @@ const getInitialSeedData = () => {
     {
       id: 'c0000000-0000-0000-0000-000000000002',
       employee_id: 'DOC-001',
+      license_no: 'ว. 34567',
       line_user_id: 'U_DR_PARAVEE_HEAD',
       prefix_th: 'นพ.',
       first_name_th: 'ปารวี',
@@ -223,6 +225,7 @@ const getInitialSeedData = () => {
     {
       id: 'c0000000-0000-0000-0000-000000000003',
       employee_id: 'DOC-002',
+      license_no: 'ว. 48921',
       line_user_id: 'U_DR_CHARTCHAI',
       prefix_th: 'นพ.',
       first_name_th: 'ชาติชาย',
@@ -239,6 +242,7 @@ const getInitialSeedData = () => {
     {
       id: 'c0000000-0000-0000-0000-000000000004',
       employee_id: 'DOC-003',
+      license_no: 'ว. 56214',
       line_user_id: 'U_DR_KANTHEERA_PT',
       prefix_th: 'พญ.',
       first_name_th: 'กันต์ธีรา',

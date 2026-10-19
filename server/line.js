@@ -479,6 +479,109 @@ export function buildLeaveDecisionFlex(request, doctor, leaveType, action, appro
 }
 
 /**
+ * 3.1 Flex Message: ใบเสร็จ / ยืนยันการอนุมัติส่งกลับหาผู้อนุมัติ (Approver Receipt / Feedback)
+ */
+export function buildApproverReceiptFlex(request, doctor, leaveType, isAlready = false) {
+  const periodText = request.half_day_type === 'MORNING' ? ' (ครึ่งวันเช้า)' :
+                     request.half_day_type === 'AFTERNOON' ? ' (ครึ่งวันบ่าย)' : ' (เต็มวัน)';
+  const dateText = request.start_date === request.end_date
+    ? `${request.start_date}${periodText}`
+    : `${request.start_date} ถึง ${request.end_date} (${request.duration_days} วัน)`;
+
+  return {
+    type: 'flex',
+    altText: isAlready 
+      ? `[แจ้งสถานะ] ใบลา ${request.request_no} ได้รับการอนุมัติไปแล้ว` 
+      : `[อนุมัติสำเร็จ] ใบลา ${request.request_no} ได้รับการอนุมัติเรียบร้อยแล้ว`,
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#059669', // Emerald
+        paddingAll: '16px',
+        contents: [
+          {
+            type: 'text',
+            text: 'โรงพยาบาลกรุงเทพสิริโรจน์',
+            color: '#d1fae5',
+            size: 'xs',
+            weight: 'bold'
+          },
+          {
+            type: 'text',
+            text: isAlready ? 'ℹ️ ใบลาได้รับการอนุมัติแล้ว' : '✅ บันทึกการอนุมัติเรียบร้อยแล้ว',
+            color: '#ffffff',
+            size: 'lg',
+            weight: 'bold',
+            margin: 'xs'
+          }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'เลขที่ใบลา:', size: 'sm', color: '#64748b', flex: 3 },
+              { type: 'text', text: request.request_no, size: 'sm', weight: 'bold', color: '#0f172a', flex: 5 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'แพทย์ผู้ขอลา:', size: 'sm', color: '#64748b', flex: 3 },
+              { type: 'text', text: `${doctor.prefix_th}${doctor.first_name_th} ${doctor.last_name_th}`, size: 'sm', weight: 'bold', color: '#0f172a', flex: 5 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'ประเภท:', size: 'sm', color: '#64748b', flex: 3 },
+              { type: 'text', text: `${leaveType?.name_th || 'ลาป่วย'} (${doctor.doctor_type === 'FULL_TIME' ? 'FT' : 'PT'})`, size: 'sm', weight: 'bold', color: '#006699', flex: 5 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'วันที่ลา:', size: 'sm', color: '#64748b', flex: 3 },
+              { type: 'text', text: dateText, size: 'sm', color: '#334155', flex: 5 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#f0fdf4',
+            cornerRadius: '8px',
+            paddingAll: '10px',
+            margin: 'md',
+            contents: [
+              {
+                type: 'text',
+                text: isAlready 
+                  ? 'ใบลาใบนี้ได้รับการบันทึกอนุมัติไปเรียบร้อยแล้วก่อนหน้านี้'
+                  : 'ระบบได้ส่งการแจ้งเตือนผลการอนุมัติไปยังแพทย์ผู้ยื่นคำขอเรียบร้อยแล้ว',
+                size: 'xs',
+                color: '#15803d',
+                wrap: true
+              }
+            ]
+          }
+        ]
+      }
+    }
+  };
+}
+
+/**
  * 4. Flex Message: แจ้งเตือนพี่กุ้งกรณีลาฉุกเฉิน (Emergency Alert to P'Koong)
  */
 export function buildEmergencyAlertFlex(request, doctor, leaveType, koongPhone) {

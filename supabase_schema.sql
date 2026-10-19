@@ -52,6 +52,7 @@ CREATE TABLE departments (
 CREATE TABLE doctors (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     employee_id VARCHAR(50) UNIQUE NOT NULL,          -- รหัสพนักงานแพทย์
+    license_no VARCHAR(50),                           -- เลข ว. (เลขที่ใบอนุญาตประกอบวิชาชีพเวชกรรม)
     line_user_id VARCHAR(100) UNIQUE,                 -- LINE User ID (ได้หลัง Verify ครั้งแรก)
     prefix_th VARCHAR(50) DEFAULT 'นพ.',               -- คำนำหน้า เช่น นพ., พญ.
     first_name_th VARCHAR(100) NOT NULL,
@@ -364,15 +365,15 @@ INSERT INTO leave_types (code, name_th, name_en, count_mode, allows_half_day, re
 ON CONFLICT (code) DO NOTHING;
 
 -- 3. Doctors (จำลองบุคลากรตามที่ประชุม)
-INSERT INTO doctors (id, employee_id, prefix_th, first_name_th, last_name_th, doctor_type, department_id, phone, email) VALUES
+INSERT INTO doctors (id, employee_id, license_no, prefix_th, first_name_th, last_name_th, doctor_type, department_id, phone, email) VALUES
 -- พี่กุ้ง (แอดมินฝ่ายการแพทย์)
-('c0000000-0000-0000-0000-000000000001', 'EMP-KOONG', 'คุณ', 'สิริมาศ (พี่กุ้ง)', 'ฝ่ายการแพทย์', 'FULL_TIME', 'd1111111-1111-1111-1111-111111111111', '076-361888', 'koong_med@bsi.hospital'),
+('c0000000-0000-0000-0000-000000000001', 'EMP-KOONG', NULL, 'คุณ', 'สิริมาศ (พี่กุ้ง)', 'ฝ่ายการแพทย์', 'FULL_TIME', 'd1111111-1111-1111-1111-111111111111', '076-361888', 'koong_med@bsi.hospital'),
 -- นพ.ปารวี (หัวหน้าแผนกอายุรกรรม / Approver)
-('c0000000-0000-0000-0000-000000000002', 'DOC-001', 'นพ.', 'ปารวี', 'ชาญวิทย์', 'FULL_TIME', 'd1111111-1111-1111-1111-111111111111', '081-1112233', 'paravee.c@bsi.hospital'),
+('c0000000-0000-0000-0000-000000000002', 'DOC-001', 'ว. 34567', 'นพ.', 'ปารวี', 'ชาญวิทย์', 'FULL_TIME', 'd1111111-1111-1111-1111-111111111111', '081-1112233', 'paravee.c@bsi.hospital'),
 -- นพ.ชาติ (แพทย์ประจำ FT แผนกอายุรกรรม)
-('c0000000-0000-0000-0000-000000000003', 'DOC-002', 'นพ.', 'ชาติชาย', 'วิสัยทัศน์', 'FULL_TIME', 'd1111111-1111-1111-1111-111111111111', '082-2223344', 'chartchai.v@bsi.hospital'),
+('c0000000-0000-0000-0000-000000000003', 'DOC-002', 'ว. 48921', 'นพ.', 'ชาติชาย', 'วิสัยทัศน์', 'FULL_TIME', 'd1111111-1111-1111-1111-111111111111', '082-2223344', 'chartchai.v@bsi.hospital'),
 -- พญ.กันต์ธีรา (แพทย์ Part-time แผนกอายุรกรรม)
-('c0000000-0000-0000-0000-000000000004', 'DOC-003', 'พญ.', 'กันต์ธีรา', 'พิทักษ์ชีพ', 'PART_TIME', 'd1111111-1111-1111-1111-111111111111', '083-3334455', 'kantheera.p@bsi.hospital')
+('c0000000-0000-0000-0000-000000000004', 'DOC-003', 'ว. 56214', 'พญ.', 'กันต์ธีรา', 'พิทักษ์ชีพ', 'PART_TIME', 'd1111111-1111-1111-1111-111111111111', '083-3334455', 'kantheera.p@bsi.hospital')
 ON CONFLICT (employee_id) DO NOTHING;
 
 -- 4. Doctor Roles

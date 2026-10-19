@@ -8,6 +8,7 @@ import {
   Phone,
   Paperclip,
   CheckCircle,
+  Check,
   Info,
   Send,
   Sparkles,
@@ -17,6 +18,38 @@ import {
   FileText,
   CalendarDays
 } from 'lucide-react';
+
+// Helper for Instant Real-Time Duration Calculation (Working Days vs Calendar Days)
+function getClientCalculatedDuration(startDate, endDate, halfDayType, countMode = 'WORKING_DAYS') {
+  if (!startDate) return 0;
+  if (halfDayType === 'MORNING' || halfDayType === 'AFTERNOON') {
+    return 0.5;
+  }
+  const end = endDate || startDate;
+  const startD = new Date(startDate);
+  startD.setHours(0, 0, 0, 0);
+  const endD = new Date(end);
+  endD.setHours(0, 0, 0, 0);
+
+  if (startD > endD) return 1;
+
+  if (countMode === 'CALENDAR_DAYS') {
+    const diffTime = Math.abs(endD - startD);
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  }
+
+  // WORKING_DAYS (skip Saturday = 6 and Sunday = 0)
+  let days = 0;
+  const current = new Date(startD);
+  while (current <= endD) {
+    const dow = current.getDay();
+    if (dow !== 0 && dow !== 6) {
+      days++;
+    }
+    current.setDate(current.getDate() + 1);
+  }
+  return Math.max(1, days);
+}
 
 export default function DoctorLiffPage() {
   const { currentDoctor, doctors, refreshDoctors } = useAuth();
@@ -37,7 +70,7 @@ export default function DoctorLiffPage() {
       .then(data => {
         if (data && data.phone_emergency) setContactSettings(data);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Form State
@@ -171,11 +204,17 @@ export default function DoctorLiffPage() {
     d => d.id !== currentDoctor?.id && d.department_id === currentDoctor?.department_id && d.is_active
   );
 
-  // Leave Balance & Quota Calculations
+  // Real-time Duration & Leave Balance Calculations
+  const countMode = selectedType?.count_mode || 'WORKING_DAYS';
+  const currentFinalEnd = halfDayType !== 'FULL_DAY' ? startDate : (endDate || startDate);
+  const clientDays = getClientCalculatedDuration(startDate, currentFinalEnd, halfDayType, countMode);
+  const activeDuration = durationPreview?.duration_days !== undefined ? Number(durationPreview.duration_days) : clientDays;
+  const fullDayDuration = getClientCalculatedDuration(startDate, endDate || startDate, 'FULL_DAY', countMode);
+
   const selectedBalance = balances.find(b => b.leave_type_id === selectedType?.id);
   const remainingDays = selectedBalance !== undefined ? Number(selectedBalance.remaining_days) : null;
   const isPersonalQuotaExhausted = selectedBalance !== undefined && remainingDays !== null && remainingDays <= 0;
-  const isRequestedExceeded = selectedBalance !== undefined && remainingDays !== null && durationPreview && durationPreview.duration_days > remainingDays;
+  const isRequestedExceeded = selectedBalance !== undefined && remainingDays !== null && activeDuration > remainingDays;
   const isDeptQuotaFull = Boolean(quotaInfo && quotaInfo.status === 'FULL' && !isEmergency);
   const isBlockedByQuota = isPersonalQuotaExhausted || isRequestedExceeded || isDeptQuotaFull;
 
@@ -287,16 +326,16 @@ export default function DoctorLiffPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-sky-50/50 to-slate-200 py-4 px-3 sm:px-6 max-w-xl mx-auto flex flex-col justify-center">
-      
+
       {/* Mobile LIFF Container Card */}
       <div className="bg-white/80 backdrop-blur-xl rounded-[24px] shadow-2xl overflow-hidden border border-white shadow-sky-900/10 transition-all duration-500 hover:shadow-sky-900/20">
-        
+
         {/* Hospital Brand Header */}
         <div className="bg-gradient-to-r from-[#006699] via-[#0284c7] to-[#008b8b] text-white p-5 relative overflow-hidden">
           {/* Decorative shapes */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10 animate-pulse-subtle"></div>
           <div className="absolute bottom-0 left-0 w-24 h-24 bg-sky-300/20 rounded-full blur-xl -ml-10 -mb-10"></div>
-          
+
           <div className="flex items-center justify-between relative z-10">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
@@ -322,7 +361,9 @@ export default function DoctorLiffPage() {
           <div className="mt-3 pt-3 border-t border-white/15 flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
               <span className="font-semibold">{currentDoctor.prefix_th}{currentDoctor.first_name_th} {currentDoctor.last_name_th}</span>
-              <span className="text-sky-200 text-[11px]">({currentDoctor.employee_id})</span>
+              <span className="text-sky-200 text-[11px] font-mono">
+                ({currentDoctor.employee_id}{currentDoctor.license_no ? ` • ${currentDoctor.license_no}` : ''})
+              </span>
             </div>
             <span className="text-sky-200 bg-sky-950/30 px-2 py-0.5 rounded text-[11px]">
               แผนก{currentDoctor.department_name || 'อายุรกรรม'}
@@ -330,87 +371,23 @@ export default function DoctorLiffPage() {
           </div>
         </div>
 
-        {/* Success Modal / Banner */}
-        {successResult && (
-          <div className="p-4 bg-emerald-50 border-b border-emerald-200 animate-in fade-in duration-200">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
-                <CheckCircle className="w-5 h-5" />
-              </div>
-              <div className="flex-1 text-xs">
-                <h4 className="font-bold text-emerald-900 text-sm">ยื่นใบลาสำเร็จเรียบร้อย!</h4>
-                <p className="text-emerald-700 mt-0.5">
-                  เลขที่ใบลา: <span className="font-mono font-bold">{successResult.request.request_no}</span>
-                </p>
-                <p className="text-emerald-600 mt-1">
-                  ระบบได้ส่ง LINE Flex Message แบบ 1-on-1 ไปยังหัวหน้าแผนกเรียบร้อยแล้ว
-                </p>
-                {successResult.quota_warning && (
-                  <p className="mt-2 p-2 bg-amber-100/80 text-amber-800 rounded text-[11px] font-medium border border-amber-200">
-                    ⚠️ {successResult.quota_warning}
-                  </p>
-                )}
-                {successResult.line_quota_error && (
-                  <div className="mt-2 p-2 bg-rose-100 text-rose-800 rounded text-[11px] font-medium border border-rose-200">
-                    <p className="font-bold flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5" /> แจ้งเตือนข้อความ LINE เต็ม!
-                    </p>
-                    <p className="mt-0.5">
-                      เนื่องจากโควตาส่งข้อความผ่าน LINE ของระบบเต็ม กรุณาโทรแจ้งหัวหน้าแผนกโดยตรง (ใบลาถูกบันทึกเข้าระบบแล้ว)
-                    </p>
-                  </div>
-                )}
-                <button
-                  onClick={() => setSuccessResult(null)}
-                  className="mt-3 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all"
-                >
-                  ยื่นใบลาเพิ่มเติม
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* Emergency Alert Banner (Same-day leave detection - Goal G3) */}
-        {isEmergency && (
-          <div className="bg-rose-50 border-y border-rose-200 p-3.5 flex flex-col gap-2 animate-pulse-subtle">
-            <div className="flex items-start gap-2.5">
-              <div className="p-1.5 bg-rose-500 text-white rounded-lg shrink-0">
-                <AlertTriangle className="w-4 h-4" />
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-rose-800">
-                  แจ้งเตือน: ท่านกำลังยื่นลาในวันปฏิบัติงาน (Same-Day Leave)
-                </h4>
-                <p className="text-[11px] text-rose-700 mt-0.5 leading-snug">
-                  กรุณาโทรแจ้งฝ่ายการแพทย์ ({contactSettings.coordinator_name || 'เจ้าหน้าที่ฝ่ายการแพทย์'}) โดยตรงทันที เพื่อประสานงานปิดตารางออกตรวจหรือหาแพทย์ทดแทน
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 mt-1">
-              <a
-                href={`tel:${(contactSettings.phone_emergency || '076361888').replace(/[^0-9]/g, '')}`}
-                className="flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all"
-              >
-                <Phone className="w-3.5 h-3.5" />
-                <span>โทรแจ้งฝ่ายการแพทย์ ({contactSettings.phone_emergency}{contactSettings.phone_ext ? ` ต่อ ${contactSettings.phone_ext}` : ''})</span>
-              </a>
-              <div className="text-[10px] text-rose-600 font-semibold px-2 py-1 bg-white rounded border border-rose-200">
-                ระบบจะส่ง Push Alert ด่วน
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Section 1: Doctor Leave Balances Carousel / Grid */}
         <div className="p-4 bg-slate-50/70 border-b border-slate-200">
           <div className="flex items-center justify-between mb-2.5">
-            <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-sky-600" />
-              สิทธิ์วันลาคงเหลือประจำปี ({new Date().getFullYear()})
-            </h2>
-            <span className="text-[10px] text-slate-400">อัปเดตแบบ Real-time</span>
+            <div>
+              <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+                สิทธิ์วันลาคงเหลือประจำปี ({new Date().getFullYear()})
+              </h2>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                สรุปโควตาคงเหลือของท่าน (ดูข้อมูลอย่างเดียว ไม่สามารถกดได้)
+              </p>
+            </div>
+            <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
+              อัปเดตแบบ Real-time
+            </span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -421,36 +398,72 @@ export default function DoctorLiffPage() {
                   : 'กำลังโหลดสิทธิ์คงเหลือ...'}
               </div>
             ) : (
-              balances.map(b => (
-                <div
-                  key={b.id}
-                  className="bg-white/90 backdrop-blur-md p-3 rounded-2xl border border-sky-100 shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-sky-300 transition-all duration-300 group cursor-default"
-                >
-                  <div className="text-[11px] font-semibold text-slate-600 truncate">
-                    {b.leave_type_name}
-                  </div>
-                  <div className="mt-1 flex items-baseline justify-between">
-                    <span className="text-lg font-bold text-[#006699]">
-                      {b.remaining_days}
-                    </span>
-                    <span className="text-[10px] text-slate-400">
-                      / {b.total_quota} วัน
-                    </span>
-                  </div>
-                  {b.pending_days > 0 && (
-                    <div className="text-[9px] text-amber-600 font-medium mt-0.5">
-                      (รออนุมัติ {b.pending_days} วัน)
+              balances.map(b => {
+                const isSelectedBal = selectedType?.id === b.leave_type_id;
+                const orig = Number(b.remaining_days);
+                const after = isSelectedBal ? Math.max(0, orig - activeDuration) : orig;
+
+                return (
+                  <div
+                    key={b.id}
+                    className={`p-3 rounded-2xl border transition-colors cursor-default select-none pointer-events-none ${isSelectedBal
+                        ? 'bg-sky-50/80 border-sky-300 ring-2 ring-[#006699]/30 shadow-xs'
+                        : 'bg-white/95 border-slate-200/80 shadow-2xs'
+                      }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="text-[11px] font-bold text-slate-700 truncate">
+                        {b.leave_type_name}
+                      </div>
+                      {isSelectedBal && (
+                        <span className="text-[9px] font-bold bg-[#006699] text-white px-1.5 py-0.2 rounded-full">
+                          เลือกอยู่
+                        </span>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))
+                    
+                    <div className="mt-1 flex items-baseline justify-between">
+                      {isSelectedBal && activeDuration > 0 ? (
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-xs font-bold text-slate-400 line-through">
+                            {orig}
+                          </span>
+                          <span className="text-lg font-extrabold text-emerald-600">
+                            {after}
+                          </span>
+                          <span className="text-[10px] font-bold text-rose-500">
+                            (-{activeDuration})
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-lg font-bold text-[#006699]">
+                          {orig}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-slate-400">
+                        / {b.total_quota} วัน
+                      </span>
+                    </div>
+
+                    {isSelectedBal && activeDuration > 0 ? (
+                      <div className="text-[9px] text-emerald-700 font-semibold mt-0.5 flex items-center gap-1">
+                        <span>หลังลาเหลือ {after} วัน</span>
+                      </div>
+                    ) : b.pending_days > 0 ? (
+                      <div className="text-[9px] text-amber-600 font-medium mt-0.5">
+                        (รออนุมัติ {b.pending_days} วัน)
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
 
         {/* Section 2: Form */}
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          
+
           {/* Error Message */}
           {errorMessage && (
             <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-medium flex items-center gap-2">
@@ -476,15 +489,14 @@ export default function DoctorLiffPage() {
                     type="button"
                     key={lt.id}
                     onClick={() => setSelectedType(lt)}
-                    className={`p-3 rounded-2xl border text-left transition-all duration-300 relative flex flex-col justify-between overflow-hidden group ${
-                      isSelected
+                    className={`p-3 rounded-2xl border text-left transition-all duration-300 relative flex flex-col justify-between overflow-hidden group ${isSelected
                         ? isFull
                           ? 'border-rose-400 bg-gradient-to-br from-rose-50 to-white shadow-md ring-1 ring-rose-400'
                           : 'border-[#006699] bg-gradient-to-br from-sky-50 to-white shadow-md shadow-sky-900/10 ring-1 ring-[#006699]'
                         : isFull
-                        ? 'border-rose-200/90 bg-rose-50/30 hover:border-rose-300'
-                        : 'border-slate-200 hover:border-sky-300 hover:shadow-sm hover:-translate-y-0.5 bg-white'
-                    }`}
+                          ? 'border-rose-200/90 bg-rose-50/30 hover:border-rose-300'
+                          : 'border-slate-200 hover:border-sky-300 hover:shadow-sm hover:-translate-y-0.5 bg-white'
+                      }`}
                   >
                     {isSelected && (
                       <div className={`absolute top-0 right-0 w-12 h-12 rounded-bl-full -mr-2 -mt-2 ${isFull ? 'bg-rose-200/40' : 'bg-sky-200/30'}`} />
@@ -506,9 +518,17 @@ export default function DoctorLiffPage() {
                     <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between gap-1 flex-wrap">
                       <span>{lt.allows_half_day ? 'ลาครึ่งวันได้' : 'เต็มวันเท่านั้น'}</span>
                       {hasQuota && (
-                        <span className={`font-semibold ${isFull ? 'text-rose-600 font-bold' : 'text-[#006699]'}`}>
-                          เหลือ {bal.remaining_days} วัน
-                        </span>
+                        isSelected && activeDuration > 0 ? (
+                          <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[10px] flex items-center gap-1">
+                            <span className="text-slate-400 line-through text-[9px]">{bal.remaining_days}</span>
+                            <span>เหลือ {Math.max(0, Number(bal.remaining_days) - activeDuration)} วัน</span>
+                            <span className="text-rose-600 font-extrabold text-[9px]">(-{activeDuration})</span>
+                          </span>
+                        ) : (
+                          <span className={`font-semibold ${isFull ? 'text-rose-600 font-bold' : 'text-[#006699]'}`}>
+                            เหลือ {bal.remaining_days} วัน
+                          </span>
+                        )
                       )}
                     </div>
                   </button>
@@ -535,7 +555,7 @@ export default function DoctorLiffPage() {
                 <div>
                   <strong className="font-bold">จำนวนวันลาเกินสิทธิ์คงเหลือ:</strong>
                   <p className="mt-0.5 text-[11px] leading-relaxed text-amber-700">
-                    ท่านเลือกวันลา {durationPreview?.duration_days} วัน แต่มีสิทธิ์คงเหลือ {remainingDays} วัน กรุณาปรับลดจำนวนวันลา
+                    ท่านเลือกวันลา {activeDuration} วัน แต่มีสิทธิ์คงเหลือ {remainingDays} วัน กรุณาปรับลดจำนวนวันลา
                   </p>
                 </div>
               </div>
@@ -553,8 +573,9 @@ export default function DoctorLiffPage() {
                   type="date"
                   value={startDate}
                   onChange={(e) => {
-                    setStartDate(e.target.value);
-                    if (e.target.value > endDate) setEndDate(e.target.value);
+                    const newStart = e.target.value;
+                    setStartDate(newStart);
+                    if (newStart > endDate) setEndDate(newStart);
                   }}
                   className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden transition-all"
                   required
@@ -581,12 +602,17 @@ export default function DoctorLiffPage() {
           {/* 3. รูปแบบวันลา (เต็มวัน / ครึ่งวัน) */}
           {selectedType?.allows_half_day && (
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                3. ระยะเวลาการลา
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  3. ระยะเวลาการลา
+                </label>
+                <span className="text-[11px] font-bold text-[#006699] bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-200 animate-in fade-in">
+                  รวมวันลา: {activeDuration} วัน
+                </span>
+              </div>
               <div className="grid grid-cols-3 gap-1.5">
                 {[
-                  { id: 'FULL_DAY', label: 'เต็มวัน (1.0 วัน)' },
+                  { id: 'FULL_DAY', label: `เต็มวัน (${fullDayDuration.toFixed(1)} วัน)` },
                   { id: 'MORNING', label: 'ครึ่งวันเช้า (0.5 วัน)' },
                   { id: 'AFTERNOON', label: 'ครึ่งวันบ่าย (0.5 วัน)' }
                 ].map(opt => (
@@ -594,11 +620,10 @@ export default function DoctorLiffPage() {
                     type="button"
                     key={opt.id}
                     onClick={() => setHalfDayType(opt.id)}
-                    className={`py-2 px-2 rounded-lg text-xs font-medium border text-center transition-all ${
-                      halfDayType === opt.id
-                        ? 'bg-[#006699] text-white border-[#006699] shadow-xs'
+                    className={`py-2 px-2 rounded-lg text-xs font-medium border text-center transition-all ${halfDayType === opt.id
+                        ? 'bg-[#006699] text-white border-[#006699] shadow-xs font-bold'
                         : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     {opt.label}
                   </button>
@@ -608,43 +633,39 @@ export default function DoctorLiffPage() {
           )}
 
           {/* Live Duration Calculation Card */}
-          {durationPreview && (
-            <div className="p-3 bg-sky-50/90 border border-sky-100 rounded-xl flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <CalendarDays className="w-4 h-4 text-[#006699]" />
-                <div>
-                  <span className="font-semibold text-slate-700">คำนวณวันลาสุทธิ: </span>
-                  <span className="font-bold text-[#006699] text-sm">{durationPreview.duration_days} วัน</span>
-                  <span className="text-[10px] text-slate-500 ml-1">
-                    ({durationPreview.count_mode === 'WORKING_DAYS' ? 'นับเฉพาะวันทำการ' : 'นับทุกวันตามปฏิทิน'})
-                  </span>
-                </div>
-              </div>
-              {durationPreview.holidays_in_range?.length > 0 && (
-                <span
-                  className="text-[10px] bg-white text-[#006699] font-bold px-2 py-0.5 rounded-full border border-sky-200"
-                  title={durationPreview.holidays_in_range.map(h => `${h.holiday_date}: ${h.name_th}`).join(', ')}
-                >
-                  เว้นวันหยุด รพ. {durationPreview.holidays_in_range.length} วัน
+          <div className="p-3 bg-sky-50/90 border border-sky-100 rounded-xl flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-[#006699]" />
+              <div>
+                <span className="font-semibold text-slate-700">คำนวณวันลาสุทธิ: </span>
+                <span className="font-bold text-[#006699] text-sm">{activeDuration} วัน</span>
+                <span className="text-[10px] text-slate-500 ml-1">
+                  ({countMode === 'WORKING_DAYS' ? 'นับเฉพาะวันทำการ' : 'นับทุกวันตามปฏิทิน'})
                 </span>
-              )}
+              </div>
             </div>
-          )}
+            {durationPreview?.holidays_in_range?.length > 0 && (
+              <span
+                className="text-[10px] bg-white text-[#006699] font-bold px-2 py-0.5 rounded-full border border-sky-200"
+                title={durationPreview.holidays_in_range.map(h => `${h.holiday_date}: ${h.name_th}`).join(', ')}
+              >
+                เว้นวันหยุด รพ. {durationPreview.holidays_in_range.length} วัน
+              </span>
+            )}
+          </div>
 
           {/* Department Quota Indicator Box */}
           {quotaInfo && (
-            <div className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
-              quotaInfo.status === 'FULL'
+            <div className={`p-3 rounded-xl border text-xs flex items-center justify-between ${quotaInfo.status === 'FULL'
                 ? 'bg-rose-50 border-rose-200 text-rose-800'
                 : quotaInfo.status === 'NEAR_LIMIT'
-                ? 'bg-amber-50 border-amber-200 text-amber-800'
-                : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-            }`}>
+                  ? 'bg-amber-50 border-amber-200 text-amber-800'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              }`}>
               <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                  quotaInfo.status === 'FULL' ? 'bg-rose-500' :
-                  quotaInfo.status === 'NEAR_LIMIT' ? 'bg-amber-500' : 'bg-emerald-500'
-                }`} />
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${quotaInfo.status === 'FULL' ? 'bg-rose-500' :
+                    quotaInfo.status === 'NEAR_LIMIT' ? 'bg-amber-500' : 'bg-emerald-500'
+                  }`} />
                 <div>
                   <span className="font-bold">โควตาแผนก{quotaInfo.department_name}:</span>
                   <span className="ml-1">
@@ -654,7 +675,7 @@ export default function DoctorLiffPage() {
               </div>
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white shadow-2xs">
                 {quotaInfo.status === 'FULL' ? '⚠️ โควตาเต็ม' :
-                 quotaInfo.status === 'NEAR_LIMIT' ? 'ใกล้เต็ม' : 'ว่างปกติ'}
+                  quotaInfo.status === 'NEAR_LIMIT' ? 'ใกล้เต็ม' : 'ว่างปกติ'}
               </span>
             </div>
           )}
@@ -790,11 +811,10 @@ export default function DoctorLiffPage() {
           <button
             type="submit"
             disabled={submitting || isBlockedByQuota}
-            className={`w-full py-3.5 px-4 rounded-2xl text-white font-bold text-[13px] flex items-center justify-center gap-2 transition-all duration-300 ${
-              submitting || isBlockedByQuota
+            className={`w-full py-3.5 px-4 rounded-2xl text-white font-bold text-[13px] flex items-center justify-center gap-2 transition-all duration-300 ${submitting || isBlockedByQuota
                 ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
                 : 'bg-gradient-to-r from-[#006699] to-[#008b8b] hover:shadow-floating hover:-translate-y-0.5 active:scale-[0.98]'
-            }`}
+              }`}
           >
             {submitting ? (
               <span>กำลังประมวลผลและส่ง LINE...</span>
@@ -827,6 +847,100 @@ export default function DoctorLiffPage() {
         </form>
 
       </div>
+
+      {/* Centered Success Modal Pop-up (Guaranteed visible anywhere on screen) */}
+      {successResult && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 text-center animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-inner">
+              <CheckCircle className="w-9 h-9" />
+            </div>
+
+            <h3 className="text-base font-bold text-slate-800">
+              ยื่นใบลาสำเร็จเรียบร้อย!
+            </h3>
+            <p className="text-xs text-slate-500 mt-1 mb-4 leading-relaxed">
+              ระบบได้ส่ง LINE Flex Message แบบ 1-on-1 ไปยังหัวหน้าแผนกเรียบร้อยแล้ว
+            </p>
+
+            {/* Leave Details Card */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-left space-y-2.5 mb-4 text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200/80">
+                <span className="text-slate-500 font-medium">เลขที่ใบลา:</span>
+                <span className="font-mono font-bold text-[#006699] bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                  {successResult.request?.request_no}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">ประเภทการลา:</span>
+                <span className="font-bold text-slate-800">
+                  {selectedType?.name_th || 'ใบลาแพทย์'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">ช่วงวันที่ลา:</span>
+                <span className="font-semibold text-slate-800">
+                  {successResult.request?.start_date}
+                  {successResult.request?.end_date && successResult.request.end_date !== successResult.request.start_date
+                    ? ` ถึง ${successResult.request.end_date}`
+                    : ''}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">จำนวนวันลา:</span>
+                <span className="font-bold text-emerald-600 text-sm">
+                  {successResult.request?.duration_days} วัน
+                </span>
+              </div>
+
+              {successResult.quota_warning && (
+                <div className="p-2 bg-amber-50 text-amber-800 rounded-lg text-[11px] font-medium border border-amber-200 mt-2">
+                  ⚠️ {successResult.quota_warning}
+                </div>
+              )}
+              {successResult.line_quota_error && (
+                <div className="p-2 bg-rose-50 text-rose-800 rounded-lg text-[11px] font-medium border border-rose-200 mt-2">
+                  ⚠️ โควตาข้อความ LINE เต็ม กรุณาโทรแจ้งหัวหน้าแผนกโดยตรง
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    if (window.liff && window.liff.isInClient && window.liff.isInClient()) {
+                      window.liff.closeWindow();
+                    } else {
+                      setSuccessResult(null);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                  } catch {
+                    setSuccessResult(null);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
+                }}
+                className="w-full bg-[#006699] hover:bg-[#005580] text-white font-bold py-3 px-4 rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-1.5 active:scale-98"
+              >
+                <Check className="w-4 h-4" />
+                <span>ปิดหน้าต่าง (กลับเข้าแชท LINE)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSuccessResult(null);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                ยื่นใบลาเพิ่มเติม / ตรวจสอบสิทธิ์
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

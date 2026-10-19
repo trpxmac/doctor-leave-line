@@ -715,7 +715,7 @@ export default function AdminMasterDataPage() {
                 type="text"
                 value={doctorSearch}
                 onChange={(e) => setDoctorSearch(e.target.value)}
-                placeholder="ค้นหาแพทย์, แผนก, รหัสพนักงาน..."
+                placeholder="ค้นหาแพทย์, แผนก, รหัสพนักงาน, เลข ว...."
                 className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-[#006699]"
               />
             </div>
@@ -753,7 +753,8 @@ export default function AdminMasterDataPage() {
                       const name = `${d.prefix_th || ''}${d.first_name_th || ''} ${d.last_name_th || ''}`.toLowerCase();
                       const emp = (d.employee_id || '').toLowerCase();
                       const dept = (d.department_name || '').toLowerCase();
-                      return name.includes(q) || emp.includes(q) || dept.includes(q);
+                      const lic = (d.license_no || '').toLowerCase();
+                      return name.includes(q) || emp.includes(q) || dept.includes(q) || lic.includes(q);
                     })
                     .map(doc => {
                       const isLinked = Boolean(doc.line_user_id);
@@ -770,9 +771,16 @@ export default function AdminMasterDataPage() {
                                 <span className="font-bold text-slate-800 block text-xs">
                                   {doc.prefix_th}{doc.first_name_th} {doc.last_name_th}
                                 </span>
-                                <span className="text-[10px] text-slate-400 font-mono">
-                                  {doc.employee_id}
-                                </span>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    {doc.employee_id}
+                                  </span>
+                                  {doc.license_no && (
+                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 font-mono">
+                                      {doc.license_no}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </td>

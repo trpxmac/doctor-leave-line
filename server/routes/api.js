@@ -21,6 +21,7 @@ import {
   buildCancelAlertFlex,
   buildWelcomeFlex,
   buildContactCardFlex,
+  buildApproverReceiptFlex,
   simulatedLineMessages,
   isLineConfigured
 } from '../line.js';
@@ -162,8 +163,27 @@ function calculateDays(startDate, endDate, countMode = 'CALENDAR_DAYS', holidays
 }
 
 // -------------------------------------------------------------
+// -------------------------------------------------------------
 // SYSTEM & HEALTH
 // -------------------------------------------------------------
+router.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    system: 'Doctor Leave @ LINE API',
+    hospital: 'Bangkok Hospital Siriroj (BSI)',
+    version: '1.0',
+    endpoints: {
+      health: '/api/health',
+      doctors: '/api/doctors',
+      departments: '/api/departments',
+      leave_types: '/api/leave-types',
+      leave_requests: '/api/leave-requests',
+      auth_me: '/api/auth/me',
+      search_doctors: '/api/auth/search-doctors'
+    }
+  });
+});
+
 router.get('/health', (req, res) => {
   const db = getDb();
   res.json({
@@ -194,7 +214,7 @@ router.get('/auth/me', (req, res) => {
   res.json({ doctor: doctor || null });
 });
 
-// Search doctors by name or phone or employeeId for Onboarding
+// Search doctors by name or phone or employeeId or licenseNo for Onboarding
 router.get('/auth/search-doctors', (req, res) => {
   const db = getDb();
   const query = (req.query.query || '').trim().toLowerCase();
@@ -206,11 +226,13 @@ router.get('/auth/search-doctors', (req, res) => {
     filtered = db.doctors.filter(d => {
       const fullName = `${d.prefix_th || ''}${d.first_name_th || ''} ${d.last_name_th || ''}`.toLowerCase();
       const empId = (d.employee_id || '').toLowerCase();
+      const lic = (d.license_no || '').toLowerCase();
       const phone = (d.phone || '').replace(/[^0-9]/g, '');
 
       return (
         fullName.includes(query) ||
         empId.includes(query) ||
+        lic.includes(query) ||
         (cleanQuery.length >= 3 && phone.includes(cleanQuery))
       );
     });
@@ -221,6 +243,7 @@ router.get('/auth/search-doctors', (req, res) => {
     return {
       id: d.id,
       employee_id: d.employee_id,
+      license_no: d.license_no || null,
       prefix_th: d.prefix_th,
       first_name_th: d.first_name_th,
       last_name_th: d.last_name_th,
@@ -1467,6 +1490,79 @@ router.post('/line/webhook', async (req, res) => {
     const events = req.body.events || [];
     const db = getDb();
 
+    // Helper function to process leave approval and send notifications to both Approver and Doctor
+    const processLeaveApproval = async (reqItem, approverLineUserId, replyToken, sourceComment = 'อนุมัติผ่าน LINE 1-Click') => {
+      const doc = db.doctors.find(d => d.id === reqItem.doctor_id);
+      const lt = db.leave_types.find(t => t.id === reqItem.leave_type_id);
+
+      if (reqItem.status === 'APPROVED') {
+        if (replyToken) {
+          const receiptFlex = buildApproverReceiptFlex(reqItem, doc || {}, lt || {}, true);
+          await sendLineReplyMessage(replyToken, receiptFlex);
+        }
+        return;
+      }
+
+      if (reqItem.status !== 'PENDING') {
+        if (replyToken) {
+          await sendLineReplyMessage(replyToken, {
+            type: 'text',
+            text: `⚠️ ใบลาเลขที่ ${reqItem.request_no} อยู่ในสถานะ "${reqItem.status}" จึงไม่สามารถอนุมัติซ้ำได้`
+          });
+        }
+        return;
+      }
+
+      // 1. Update Request Status
+      reqItem.status = 'APPROVED';
+      reqItem.updated_at = new Date().toISOString();
+
+      // 2. Deduct leave balance
+      const reqYear = new Date(reqItem.start_date).getFullYear();
+      const balance = db.leave_balances.find(b => b.doctor_id === reqItem.doctor_id && b.leave_type_id === reqItem.leave_type_id && b.fiscal_year === reqYear);
+      if (balance) {
+        balance.pending_days = Math.max(0, Number(balance.pending_days) - Number(reqItem.duration_days));
+        balance.used_days = Number(balance.used_days) + Number(reqItem.duration_days);
+        balance.updated_at = new Date().toISOString();
+      }
+
+      // 3. Find Approver Profile
+      let approver = null;
+      if (approverLineUserId) {
+        approver = db.doctors.find(d => d.line_user_id === approverLineUserId);
+      }
+      if (!approver) {
+        approver = db.doctors.find(d => d.id === 'c0000000-0000-0000-0000-000000000002');
+      }
+      const approverName = approver ? `${approver.prefix_th}${approver.first_name_th} ${approver.last_name_th}` : 'นพ.ปารวี ชาญวิทย์';
+      const approverId = approver ? approver.id : 'c0000000-0000-0000-0000-000000000002';
+
+      // 4. Record Audit/Approval Log
+      db.approval_logs.push({
+        id: uuidv4(),
+        request_id: reqItem.id,
+        step_order: 1,
+        approver_id: approverId,
+        action: 'APPROVED',
+        comments: sourceComment,
+        acted_at: new Date().toISOString()
+      });
+
+      saveStore();
+
+      // 5. Send Confirmation Receipt back to Approver via Reply Message
+      if (replyToken) {
+        const receiptFlex = buildApproverReceiptFlex(reqItem, doc || {}, lt || {}, false);
+        await sendLineReplyMessage(replyToken, receiptFlex);
+      }
+
+      // 6. Push notification to the Doctor who submitted the leave
+      if (doc && doc.line_user_id) {
+        const flex = buildLeaveDecisionFlex(reqItem, doc, lt, 'APPROVED', approverName, sourceComment);
+        await sendLinePushMessage(doc.line_user_id, flex);
+      }
+    };
+
     for (const event of events) {
       // 1. Follow Event (Doctor adds bot as friend or unblocks)
       if (event.type === 'follow') {
@@ -1493,7 +1589,26 @@ router.post('/line/webhook', async (req, res) => {
           doc = db.doctors.find(d => d.line_user_id === lineUserId);
         }
 
-        // A. Contact Medical Affairs / Emergency Hotline Card
+        // A. Quick Approval via Text: "อนุมัติใบลา LV-XXXX-XXXXX" or "อนุมัติ LV-XXXX-XXXXX"
+        const approveMatch = text.match(/(?:อนุมัติใบลา|อนุมัติ)\s*(LV-\d{4}-\d{5})/i);
+        if (approveMatch) {
+          const reqNo = approveMatch[1].toUpperCase();
+          const reqItem = db.leave_requests.find(r => r.request_no === reqNo);
+          if (reqItem) {
+            await processLeaveApproval(reqItem, lineUserId, event.replyToken, 'อนุมัติผ่านข้อความ LINE');
+            continue;
+          } else {
+            if (event.replyToken) {
+              await sendLineReplyMessage(event.replyToken, {
+                type: 'text',
+                text: `❌ ไม่พบข้อมูลใบลาเลขที่ ${reqNo} ในระบบ`
+              });
+            }
+            continue;
+          }
+        }
+
+        // B. Contact Medical Affairs / Emergency Hotline Card
         if (
           text.includes('ติดต่อ') ||
           text.includes('ฝ่ายการแพทย์') ||
@@ -1510,7 +1625,7 @@ router.post('/line/webhook', async (req, res) => {
             await sendLinePushMessage(lineUserId, contactFlex);
           }
         }
-        // B. Welcome / Leave Menu Card
+        // C. Welcome / Leave Menu Card
         else if (text.includes('ลา') || text.includes('เมนู') || text.includes('สวัสดี') || text.includes('help')) {
           const docName = doc ? `${doc.prefix_th}${doc.first_name_th} ${doc.last_name_th}` : '';
           const welcomeFlex = buildWelcomeFlex(docName);
@@ -1520,56 +1635,23 @@ router.post('/line/webhook', async (req, res) => {
         }
       }
 
+      // 3. Postback Event (Tapping Flex Message Action Button)
       if (event.type === 'postback') {
-        const params = new URLSearchParams(event.postback.data);
+        const params = new URLSearchParams(event.postback.data || '');
         const action = params.get('action');
         const requestId = params.get('id');
+        const reqNo = params.get('reqNo');
+        const lineUserId = event.source && event.source.userId;
 
-        if (action === 'approve' && requestId) {
-          const reqItem = db.leave_requests.find(r => r.id === requestId);
-          if (reqItem && reqItem.status === 'PENDING') {
-            reqItem.status = 'APPROVED';
-            reqItem.updated_at = new Date().toISOString();
-
-            const reqYear = new Date(reqItem.start_date).getFullYear();
-            const balance = db.leave_balances.find(b => b.doctor_id === reqItem.doctor_id && b.leave_type_id === reqItem.leave_type_id && b.fiscal_year === reqYear);
-            if (balance) {
-              balance.pending_days = Math.max(0, Number(balance.pending_days) - Number(reqItem.duration_days));
-              balance.used_days = Number(balance.used_days) + Number(reqItem.duration_days);
-              balance.updated_at = new Date().toISOString();
-            }
-
-            // Get dynamic approver from LINE userId
-            const lineUserId = event.source && event.source.userId;
-            let approver = null;
-            if (lineUserId) {
-              approver = db.doctors.find(d => d.line_user_id === lineUserId);
-            }
-            if (!approver) {
-              approver = db.doctors.find(d => d.id === 'c0000000-0000-0000-0000-000000000002');
-            }
-            const approverName = approver ? `${approver.prefix_th}${approver.first_name_th} ${approver.last_name_th}` : 'นพ.ปารวี ชาญวิทย์';
-            const approverId = approver ? approver.id : 'c0000000-0000-0000-0000-000000000002';
-
-            db.approval_logs.push({
-              id: uuidv4(),
-              request_id: reqItem.id,
-              step_order: 1,
-              approver_id: approverId,
-              action: 'APPROVED',
-              comments: 'อนุมัติผ่าน LINE 1-Click Postback',
-              acted_at: new Date().toISOString()
+        if (action === 'approve') {
+          const reqItem = db.leave_requests.find(r => (requestId && r.id === requestId) || (reqNo && r.request_no === reqNo));
+          if (reqItem) {
+            await processLeaveApproval(reqItem, lineUserId, event.replyToken, 'อนุมัติผ่าน LINE 1-Click');
+          } else if (event.replyToken) {
+            await sendLineReplyMessage(event.replyToken, {
+              type: 'text',
+              text: '❌ ไม่พบข้อมูลคำขอใบลาที่ระบุในระบบ'
             });
-
-            saveStore();
-
-            // Notify Doctor via LINE
-            const doc = db.doctors.find(d => d.id === reqItem.doctor_id);
-            const lt = db.leave_types.find(t => t.id === reqItem.leave_type_id);
-            if (doc && doc.line_user_id) {
-              const flex = buildLeaveDecisionFlex(reqItem, doc, lt, 'APPROVED', approverName, 'อนุมัติผ่าน LINE 1-Click');
-              await sendLinePushMessage(doc.line_user_id, flex);
-            }
           }
         }
       }

@@ -212,7 +212,12 @@ export default function ApproverPage() {
                         )}
                       </div>
                       <div className="text-xs text-slate-500 mt-0.5">
-                        รหัสแพทย์: <span className="font-mono">{req.doctor?.employee_id}</span> • แผนก{req.doctor?.department_name || 'อายุรกรรม'}
+                        รหัสแพทย์: <span className="font-mono">{req.doctor?.employee_id}</span>
+                        {req.doctor?.license_no && (
+                          <span className="font-mono text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 ml-1.5 text-[11px] font-semibold">
+                            {req.doctor.license_no}
+                          </span>
+                        )} • แผนก{req.doctor?.department_name || 'อายุรกรรม'}
                       </div>
                     </div>
                   </div>
