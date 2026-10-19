@@ -992,6 +992,19 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     const requestNo = `LV-${currentYear}-${String(countThisYear).padStart(5, '0')}`;
 
     const isUploadLater = upload_later === 'true' || upload_later === true;
+
+    // Attachment Requirement Validation (Threshold Rule)
+    const isAttachmentMandatory = Boolean(
+      leaveType.requires_attachment &&
+      (!leaveType.attachment_threshold_days || durationDays > Number(leaveType.attachment_threshold_days))
+    );
+    const hasFiles = req.files && req.files.length > 0;
+    if (isAttachmentMandatory && !hasFiles && !isUploadLater && submitted_by_admin !== 'true') {
+      return res.status(400).json({
+        error: `การลา${leaveType.name_th} (${durationDays} วัน) จำเป็นต้องมีเอกสารประกอบตามระเบียบ กรุณาแนบไฟล์ หรือเลือกสะดวกแนบเอกสารตามหลัง`
+      });
+    }
+
     const deadlineDays = Number(leaveType?.attachment_deadline_days) || 3;
     const attachmentDueDate = isUploadLater
       ? new Date(Date.now() + deadlineDays * 24 * 60 * 60 * 1000).toISOString()

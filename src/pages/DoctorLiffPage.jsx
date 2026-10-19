@@ -223,6 +223,13 @@ export default function DoctorLiffPage() {
   const isDeptQuotaFull = Boolean(quotaInfo && quotaInfo.status === 'FULL' && !isEmergency);
   const isBlockedByQuota = isPersonalQuotaExhausted || isRequestedExceeded || isDeptQuotaFull;
 
+  // Attachment Mandatory Check (Threshold Rule)
+  const isAttachmentMandatory = Boolean(
+    selectedType?.requires_attachment && (
+      !selectedType.attachment_threshold_days || activeDuration > Number(selectedType.attachment_threshold_days)
+    )
+  );
+
   // Handle Form Submission
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -237,7 +244,7 @@ export default function DoctorLiffPage() {
       return;
     }
     if (isRequestedExceeded) {
-      setErrorMessage(`สิทธิ์วันลาคงเหลือไม่เพียงพอ (ต้องการลา ${durationPreview.duration_days} วัน แต่คงเหลือ ${remainingDays} วัน)`);
+      setErrorMessage(`สิทธิ์วันลาคงเหลือไม่เพียงพอ (ต้องการลา ${durationPreview?.duration_days || activeDuration} วัน แต่คงเหลือ ${remainingDays} วัน)`);
       return;
     }
     if (isDeptQuotaFull) {
@@ -251,6 +258,12 @@ export default function DoctorLiffPage() {
     }
     if (shiftConflict?.requires_substitute && !substituteDoctorId) {
       setErrorMessage('คำขอนี้ชนกับเวรสำคัญ (ER / Night Duty) กรุณาระบุแพทย์ผู้ปฏิบัติหน้าที่แทน');
+      return;
+    }
+
+    // Attachment Requirement Validation
+    if (isAttachmentMandatory && (!files || files.length === 0) && !uploadLater) {
+      setErrorMessage(`การลา${selectedType.name_th} (${activeDuration} วัน) จำเป็นต้องมีเอกสารประกอบตามระเบียบ กรุณาแนบไฟล์ หรือติ๊กเลือก 'สะดวกแนบเอกสารตามหลัง'`);
       return;
     }
 
@@ -693,46 +706,77 @@ export default function DoctorLiffPage() {
             />
           </div>
 
-          {/* 5. เอกสารแนบ หรือ แนบตามหลัง (แสดงเฉพาะประเภทที่บังคับแนบเอกสารตามระเบียบ) */}
+          {/* 5. เอกสารแนบ หรือ แนบตามหลัง (แสดงเฉพาะประเภทที่เปิดใช้งานเอกสารประกอบ เช่น ลาป่วย, ลาอบรม) */}
           {selectedType?.requires_attachment && (
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 animate-in fade-in">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+            <div className={`p-3.5 rounded-xl border transition-all ${
+              isAttachmentMandatory 
+                ? 'bg-amber-50/40 border-amber-200' 
+                : 'bg-slate-50 border-slate-200'
+            } space-y-2.5 animate-in fade-in`}>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                   <Paperclip className="w-3.5 h-3.5 text-slate-500" />
-                  5. แนบเอกสารประกอบ (ใบรับรองแพทย์ / หนังสือเชิญ)
+                  5. เอกสารประกอบ {isAttachmentMandatory && <span className="text-rose-500">*</span>}
+                  <span className="text-[11px] font-normal text-slate-500">
+                    (ใบรับรองแพทย์ / หนังสือเชิญ)
+                  </span>
                 </label>
-                <span className="text-[10px] text-rose-600 font-semibold">
-                  {selectedType.attachment_threshold_days > 0 
-                    ? `จำเป็นเมื่อลาเกิน ${selectedType.attachment_threshold_days} วัน`
-                    : 'จำเป็นตามระเบียบ'}
-                </span>
+                <div>
+                  {isAttachmentMandatory ? (
+                    <span className="inline-flex items-center gap-1 text-[10.5px] text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full font-semibold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                      จำเป็นต้องแนบ {selectedType.attachment_threshold_days > 0 ? `(ลา ${activeDuration} วัน เกินเกณฑ์ ${selectedType.attachment_threshold_days} วัน)` : ''}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[10.5px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                      ไม่บังคับ {selectedType.attachment_threshold_days > 0 ? `(ลา ${activeDuration} วัน ยังไม่เกิน ${selectedType.attachment_threshold_days} วัน แนบหรือไม่ก็ได้)` : '(ตามความสะดวก)'}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {!uploadLater && (
-                <input
-                  type="file"
-                  multiple
-                  accept=".pdf,image/png,image/jpeg"
-                  onChange={(e) => setFiles(e.target.files)}
-                  className="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-sky-100 file:text-[#006699] hover:file:bg-sky-200"
-                />
+                <div>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,image/png,image/jpeg"
+                    onChange={(e) => setFiles(e.target.files)}
+                    className="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-sky-100 file:text-[#006699] hover:file:bg-sky-200 cursor-pointer"
+                  />
+                  {files && files.length > 0 && (
+                    <p className="text-[10px] text-emerald-600 mt-1 font-medium">
+                      ✓ เลือกแล้ว {files.length} ไฟล์
+                    </p>
+                  )}
+                </div>
               )}
 
               {/* Checkbox: แนบเอกสารตามหลัง (เปลี่ยนจำนวนวันตามประเภทการลาที่ตั้งค่าไว้) */}
-              <label className="flex items-center gap-2 cursor-pointer pt-1">
+              <label className="flex items-start gap-2 cursor-pointer pt-0.5">
                 <input
                   type="checkbox"
                   checked={uploadLater}
                   onChange={(e) => setUploadLater(e.target.checked)}
-                  className="w-4 h-4 rounded text-[#006699] focus:ring-sky-400"
+                  className="w-4 h-4 mt-0.5 rounded text-[#006699] focus:ring-sky-400 cursor-pointer"
                 />
-                <span className="text-xs text-slate-700 font-medium">
-                  สะดวกแนบเอกสารตามหลัง (ภายใน {selectedType?.attachment_deadline_days || 3} วัน)
-                </span>
+                <div className="text-xs">
+                  <span className={`font-medium ${uploadLater ? 'text-[#006699] font-bold' : 'text-slate-700'}`}>
+                    สะดวกแนบเอกสารตามหลัง (ภายใน {selectedType?.attachment_deadline_days || 3} วัน)
+                  </span>
+                  <p className="text-[10px] text-slate-400 italic mt-0.5">
+                    * ทางเลือกสำหรับแพทย์เมื่อยังไม่มีเอกสารติดตัว ระบบจะส่ง LINE Reminder แจ้งเตือนพร้อมลิงก์ให้อัปโหลดตามหลัง
+                  </p>
+                </div>
               </label>
-              <p className="text-[10px] text-slate-400 italic">
-                * ฟังก์ชันอำนวยความสะดวกสำหรับแพทย์ขณะใช้งานบนมือถือ ระบบจะส่ง LINE Reminder เตือนในภายหลัง
-              </p>
+
+              {isAttachmentMandatory && !uploadLater && (!files || files.length === 0) && (
+                <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200/80 rounded-lg p-2 flex items-center gap-1.5">
+                  <span className="font-bold">คำแนะนำ:</span>
+                  <span>กรุณาเลือกไฟล์แนบ <b>หรือ</b> ติ๊กช่อง 'สะดวกแนบเอกสารตามหลัง' อย่างใดอย่างหนึ่งครับ</span>
+                </div>
+              )}
             </div>
           )}
 
