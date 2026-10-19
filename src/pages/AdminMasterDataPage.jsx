@@ -1469,7 +1469,7 @@ export default function AdminMasterDataPage() {
                   <div className="pl-6 grid grid-cols-2 gap-3 pt-1 animate-in fade-in">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                        แนบเมื่อลาตั้งแต่ (วันขึ้นไป)
+                        บังคับแนบเมื่อลาเกิน (วัน)
                       </label>
                       <input
                         type="number"
@@ -1477,13 +1477,18 @@ export default function AdminMasterDataPage() {
                         step="0.5"
                         value={typeForm.attachment_threshold_days}
                         onChange={(e) => setTypeForm({ ...typeForm, attachment_threshold_days: parseFloat(e.target.value) || 0 })}
-                        placeholder="0 = แนบทุกกรณี"
+                        placeholder="เช่น 2 (0 = บังคับทุกกรณี)"
                         className="w-full p-2 rounded-lg border border-slate-300"
                       />
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        {typeForm.attachment_threshold_days > 0 
+                          ? `* ลาไม่เกิน ${typeForm.attachment_threshold_days} วัน ไม่บังคับแนบ` 
+                          : '* บังคับแนบทุกกรณี (ตั้งแต่ 0.5 วัน)'}
+                      </p>
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                        อนุญาตให้แนบตามหลังได้ภายใน (วัน)
+                        แนบตามหลังได้ภายใน (วัน)
                       </label>
                       <input
                         type="number"
@@ -1493,6 +1498,9 @@ export default function AdminMasterDataPage() {
                         placeholder="เช่น 3, 7, 14"
                         className="w-full p-2 rounded-lg border border-slate-300 font-bold text-[#006699]"
                       />
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        * กำหนดวันเตือน LINE Reminder
+                      </p>
                     </div>
                   </div>
                 )}
