@@ -428,7 +428,7 @@ export default function DoctorLiffPage() {
                     </div>
                     <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between gap-1 flex-wrap">
                       <span>{lt.allows_half_day ? 'ลาครึ่งวันได้' : 'เต็มวันเท่านั้น'}</span>
-                      {hasQuota && (
+                      {hasQuota ? (
                         isSelected && activeDuration > 0 ? (
                           <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[10px] flex items-center gap-1">
                             <span className="text-slate-400 line-through text-[9px]">{bal.remaining_days}</span>
@@ -440,6 +440,14 @@ export default function DoctorLiffPage() {
                             เหลือ {bal.remaining_days} วัน
                           </span>
                         )
+                      ) : (
+                        <span className={`font-semibold px-2 py-0.5 rounded text-[10px] ${
+                          lt.code === 'UNPAID'
+                            ? 'text-slate-600 bg-slate-100 border border-slate-200/80'
+                            : 'text-amber-700 bg-amber-50 border border-amber-200/60'
+                        }`}>
+                          {lt.code === 'UNPAID' ? 'ไม่จำกัดสิทธิ์' : 'ตามเกณฑ์ รพ.'}
+                        </span>
                       )}
                     </div>
                   </button>
