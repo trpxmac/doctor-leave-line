@@ -116,6 +116,12 @@ export default function DoctorLiffPage() {
     fetchTypes();
   }, [currentDoctor]);
 
+  // Reset attachment state when leave type changes
+  useEffect(() => {
+    setUploadLater(false);
+    setFiles([]);
+  }, [selectedType]);
+
   // Fetch Balances for current doctor
   const fetchBalances = async () => {
     if (!currentDoctor) return;
@@ -687,56 +693,48 @@ export default function DoctorLiffPage() {
             />
           </div>
 
-          {/* 5. เอกสารแนบ หรือ แนบตามหลัง (Doctor-Friendly UX) */}
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <Paperclip className="w-3.5 h-3.5 text-slate-500" />
-                5. แนบเอกสารประกอบ (ใบรับรองแพทย์ / หนังสือเชิญ)
-              </label>
-              {selectedType?.requires_attachment ? (
+          {/* 5. เอกสารแนบ หรือ แนบตามหลัง (แสดงเฉพาะประเภทที่บังคับแนบเอกสารตามระเบียบ) */}
+          {selectedType?.requires_attachment && (
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Paperclip className="w-3.5 h-3.5 text-slate-500" />
+                  5. แนบเอกสารประกอบ (ใบรับรองแพทย์ / หนังสือเชิญ)
+                </label>
                 <span className="text-[10px] text-rose-600 font-semibold">
                   {selectedType.attachment_threshold_days > 0 
                     ? `จำเป็นเมื่อลาเกิน ${selectedType.attachment_threshold_days} วัน`
                     : 'จำเป็นตามระเบียบ'}
                 </span>
-              ) : (
-                <span className="text-[10px] text-slate-400 font-medium">
-                  (ไม่บังคับสำหรับ{selectedType?.name_th || 'ประเภทนี้'})
-                </span>
+              </div>
+
+              {!uploadLater && (
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,image/png,image/jpeg"
+                  onChange={(e) => setFiles(e.target.files)}
+                  className="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-sky-100 file:text-[#006699] hover:file:bg-sky-200"
+                />
               )}
+
+              {/* Checkbox: แนบเอกสารตามหลัง (เปลี่ยนจำนวนวันตามประเภทการลาที่ตั้งค่าไว้) */}
+              <label className="flex items-center gap-2 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={uploadLater}
+                  onChange={(e) => setUploadLater(e.target.checked)}
+                  className="w-4 h-4 rounded text-[#006699] focus:ring-sky-400"
+                />
+                <span className="text-xs text-slate-700 font-medium">
+                  สะดวกแนบเอกสารตามหลัง (ภายใน {selectedType?.attachment_deadline_days || 3} วัน)
+                </span>
+              </label>
+              <p className="text-[10px] text-slate-400 italic">
+                * ฟังก์ชันอำนวยความสะดวกสำหรับแพทย์ขณะใช้งานบนมือถือ ระบบจะส่ง LINE Reminder เตือนในภายหลัง
+              </p>
             </div>
-
-            {!uploadLater && (
-              <input
-                type="file"
-                multiple
-                accept=".pdf,image/png,image/jpeg"
-                onChange={(e) => setFiles(e.target.files)}
-                className="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-sky-100 file:text-[#006699] hover:file:bg-sky-200"
-              />
-            )}
-
-            {/* Checkbox: แนบเอกสารตามหลัง (เปลี่ยนจำนวนวันตามประเภทการลาที่ตั้งค่าไว้) */}
-            {selectedType?.requires_attachment && (
-              <>
-                <label className="flex items-center gap-2 cursor-pointer pt-1">
-                  <input
-                    type="checkbox"
-                    checked={uploadLater}
-                    onChange={(e) => setUploadLater(e.target.checked)}
-                    className="w-4 h-4 rounded text-[#006699] focus:ring-sky-400"
-                  />
-                  <span className="text-xs text-slate-700 font-medium">
-                    สะดวกแนบเอกสารตามหลัง (ภายใน {selectedType?.attachment_deadline_days || 3} วัน)
-                  </span>
-                </label>
-                <p className="text-[10px] text-slate-400 italic">
-                  * ฟังก์ชันอำนวยความสะดวกสำหรับแพทย์ขณะใช้งานบนมือถือ ระบบจะส่ง LINE Reminder เตือนในภายหลัง
-                </p>
-              </>
-            )}
-          </div>
+          )}
 
           {/* Submit Button */}
           <button
