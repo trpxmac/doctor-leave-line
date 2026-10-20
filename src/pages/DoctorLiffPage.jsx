@@ -22,7 +22,8 @@ import {
   Sunrise,
   Sunset,
   Sparkles,
-  CalendarRange
+  CalendarRange,
+  Activity
 } from 'lucide-react';
 
 // Get local today date string (YYYY-MM-DD) avoiding UTC boundary issues
@@ -108,12 +109,12 @@ function getNextWorkingDay(endDateStr, holidays = []) {
 }
 
 // Helper for Real-Time Duration Calculation & Transparency Breakdown
-function getLeaveBreakdown(startDate, endDate, halfDayType, countMode = 'WORKING_DAYS', holidays = []) {
+function getLeaveBreakdown(startDate, endDate, halfDayType, countMode = 'WORKING_DAYS', holidays = [], shifts = []) {
   if (!startDate) {
-    return { totalCalendarDays: 0, weekendDays: 0, holidaysCount: 0, netDays: 0, isAllHolidays: false };
+    return { totalCalendarDays: 0, weekendDays: 0, holidaysCount: 0, weekendShiftsCount: 0, netDays: 0, isAllHolidays: false };
   }
   if (halfDayType === 'MORNING' || halfDayType === 'AFTERNOON') {
-    return { totalCalendarDays: 1, weekendDays: 0, holidaysCount: 0, netDays: 0.5, isAllHolidays: false };
+    return { totalCalendarDays: 1, weekendDays: 0, holidaysCount: 0, weekendShiftsCount: 0, netDays: 0.5, isAllHolidays: false };
   }
 
   const end = endDate || startDate;
@@ -123,13 +124,15 @@ function getLeaveBreakdown(startDate, endDate, halfDayType, countMode = 'WORKING
   const endD = new Date(eParts[0], eParts[1] - 1, eParts[2]);
 
   if (startD > endD) {
-    return { totalCalendarDays: 1, weekendDays: 0, holidaysCount: 0, netDays: 1, isAllHolidays: false };
+    return { totalCalendarDays: 1, weekendDays: 0, holidaysCount: 0, weekendShiftsCount: 0, netDays: 1, isAllHolidays: false };
   }
 
   const holidaySet = new Set((holidays || []).map(h => typeof h === 'string' ? h : h.holiday_date));
+  const shiftDateSet = new Set((shifts || []).filter(s => s.status === 'SCHEDULED' || s.shift_date).map(s => s.shift_date));
   let totalCalendarDays = 0;
   let weekendDays = 0;
   let holidaysCount = 0;
+  let weekendShiftsCount = 0;
   let workingDays = 0;
 
   const current = new Date(startD);
@@ -142,8 +145,14 @@ function getLeaveBreakdown(startDate, endDate, halfDayType, countMode = 'WORKING
     const d = String(current.getDate()).padStart(2, '0');
     const dStr = `${y}-${m}-${d}`;
     const isHoliday = holidaySet.has(dStr);
+    const hasShift = shiftDateSet.has(dStr);
 
-    if (isWeekend) {
+    if (hasShift) {
+      workingDays++;
+      if (isWeekend || isHoliday) {
+        weekendShiftsCount++;
+      }
+    } else if (isWeekend) {
       weekendDays++;
     } else if (isHoliday) {
       holidaysCount++;
@@ -159,6 +168,7 @@ function getLeaveBreakdown(startDate, endDate, halfDayType, countMode = 'WORKING
     totalCalendarDays,
     weekendDays,
     holidaysCount,
+    weekendShiftsCount,
     netDays,
     isAllHolidays: countMode === 'WORKING_DAYS' && netDays === 0
   };
@@ -287,7 +297,8 @@ export default function DoctorLiffPage() {
             start_date: startDate,
             end_date: finalEnd,
             half_day_type: effectiveHalfDay,
-            leave_type_id: selectedType.id
+            leave_type_id: selectedType.id,
+            doctor_id: currentDoctor.id
           })
         });
         if (res.ok) {
@@ -299,7 +310,7 @@ export default function DoctorLiffPage() {
       }
     };
     calc();
-  }, [startDate, endDate, halfDayType, selectedType, leaveMode]);
+  }, [startDate, endDate, halfDayType, selectedType, leaveMode, currentDoctor]);
 
   // Live Shift Conflict Check (Feature #26)
   useEffect(() => {
@@ -330,7 +341,8 @@ export default function DoctorLiffPage() {
   const countMode = selectedType?.count_mode || 'WORKING_DAYS';
   const currentFinalEnd = leaveMode === 'SINGLE' || halfDayType !== 'FULL_DAY' ? startDate : (endDate || startDate);
   const effectiveHalfDay = leaveMode === 'SINGLE' ? halfDayType : 'FULL_DAY';
-  const breakdown = getLeaveBreakdown(startDate, currentFinalEnd, effectiveHalfDay, countMode, durationPreview?.holidays_in_range);
+  const activeShifts = durationPreview?.shifts_in_range || shiftConflict?.conflicts || [];
+  const breakdown = getLeaveBreakdown(startDate, currentFinalEnd, effectiveHalfDay, countMode, durationPreview?.holidays_in_range, activeShifts);
   const activeDuration = durationPreview?.duration_days !== undefined ? Number(durationPreview.duration_days) : breakdown.netDays;
   const returnToWorkDate = getNextWorkingDay(currentFinalEnd, durationPreview?.holidays_in_range);
 
@@ -926,16 +938,31 @@ export default function DoctorLiffPage() {
                   <div className="font-bold text-slate-700">{breakdown.totalCalendarDays} วัน</div>
                 </div>
                 <div className="bg-white/90 p-2 rounded-lg border border-sky-100 text-center">
-                  <div className="text-slate-400 text-[10px]">วันหยุด ส.-อา.</div>
-                  <div className="font-bold text-slate-600">{breakdown.weekendDays} วัน (เว้น)</div>
+                  <div className="text-slate-400 text-[10px]">วันหยุด ส.-อา. (เว้น)</div>
+                  <div className="font-bold text-slate-600">
+                    {Math.max(0, breakdown.weekendDays - (durationPreview?.weekend_shifts_count || breakdown.weekendShiftsCount || 0))} วัน
+                  </div>
                 </div>
                 <div className="bg-white/90 p-2 rounded-lg border border-sky-100 text-center">
-                  <div className="text-slate-400 text-[10px]">วันหยุด รพ.</div>
-                  <div className="font-bold text-slate-600">{breakdown.holidaysCount} วัน (เว้น)</div>
+                  <div className="text-slate-400 text-[10px]">วันหยุด รพ. (เว้น)</div>
+                  <div className="font-bold text-slate-600">{breakdown.holidaysCount} วัน</div>
                 </div>
                 <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-200 text-center">
                   <div className="text-emerald-700 text-[10px] font-semibold">วันลาสุทธิที่หัก</div>
                   <div className="font-extrabold text-emerald-700">{activeDuration} วัน</div>
+                </div>
+              </div>
+            )}
+
+            {/* Weekend Shift Alert Badge */}
+            {(durationPreview?.weekend_shifts_count > 0 || breakdown.weekendShiftsCount > 0) && (
+              <div className="text-[11px] text-sky-900 bg-sky-50 p-2.5 rounded-lg border border-sky-200 flex items-start gap-2 animate-in fade-in">
+                <Activity className="w-4 h-4 text-[#006699] shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-[#006699]">
+                    ตรวจพบเวรปฏิบัติงานในวันหยุด ({durationPreview?.weekend_shifts_count || breakdown.weekendShiftsCount} วัน):{' '}
+                  </span>
+                  <span>ระบบนับรวมเป็นวันลาเนื่องจากท่านมีตารางเวรที่ต้องขึ้นตรวจ (กรุณาระบุแพทย์ปฏิบัติหน้าที่แทนด้านล่าง)</span>
                 </div>
               </div>
             )}
@@ -955,7 +982,7 @@ export default function DoctorLiffPage() {
             {activeDuration === 0 && (
               <div className="text-[11px] text-rose-800 bg-rose-50 p-2 rounded-lg border border-rose-200 flex items-center gap-1.5 animate-in fade-in">
                 <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                <span>ช่วงวันที่ท่านเลือกตรงกับวันหยุดทั้งหมด (ไม่มีวันทำการที่ต้องลา) ระบบจะไม่อนุญาตให้ส่งใบลา 0 วัน</span>
+                <span>ช่วงวันที่ท่านเลือกตรงกับวันหยุดทั้งหมด (ไม่มีวันทำการหรือเวรที่ต้องลา) ระบบจะไม่อนุญาตให้ส่งใบลา 0 วัน</span>
               </div>
             )}
           </div>

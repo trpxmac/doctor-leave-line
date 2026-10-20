@@ -122,8 +122,8 @@ function sanitizeInput(str) {
     .trim();
 }
 
-// Helper: Calculate duration between two dates
-function calculateDays(startDate, endDate, countMode = 'CALENDAR_DAYS', holidays = []) {
+// Helper: Calculate duration between two dates with Doctor Shift & Working Pattern intelligence
+function calculateDays(startDate, endDate, countMode = 'CALENDAR_DAYS', holidays = [], doctor = null, shifts = []) {
   const start = new Date(startDate);
   start.setHours(0, 0, 0, 0);
   const end = new Date(endDate);
@@ -139,7 +139,8 @@ function calculateDays(startDate, endDate, countMode = 'CALENDAR_DAYS', holidays
   const current = new Date(start);
   
   // Create a Set of holiday dates (YYYY-MM-DD)
-  const holidaySet = new Set(holidays.map(h => h.holiday_date));
+  const holidaySet = new Set(holidays.map(h => typeof h === 'string' ? h : h.holiday_date));
+  const shiftDateSet = new Set((shifts || []).filter(s => s.status === 'SCHEDULED').map(s => s.shift_date));
 
   while (current <= end) {
     const dayOfWeek = current.getDay();
@@ -151,8 +152,16 @@ function calculateDays(startDate, endDate, countMode = 'CALENDAR_DAYS', holidays
     const dateStr = `${year}-${month}-${date}`;
     
     const isHoliday = holidaySet.has(dateStr);
+    const hasScheduledShift = shiftDateSet.has(dateStr);
 
-    if (!isWeekend && !isHoliday) {
+    // Hybrid Rule (ตรวจตารางเวรจริงก่อน + มีค่าตั้งต้นโปรไฟล์แพทย์):
+    // 1. ถ้ามีตารางเวรในวันดังกล่าว (แม้เป็นเสาร์-อาทิตย์ หรือวันหยุดนักขัตฤกษ์) -> นับเป็นวันลา/วันปฏิบัติงาน!
+    if (hasScheduledShift) {
+      days++;
+    } else if (isWeekend || isHoliday) {
+      // 2. ถ้าเป็นเสาร์-อาทิตย์ หรือวันหยุด รพ. และหมอไม่มีเวร -> เว้น (ไม่หักวันลา)
+    } else {
+      // 3. วันทำการปกติ (จันทร์ - ศุกร์ ที่ไม่ใช่วันหยุด รพ.) -> นับเป็นวันปฏิบัติงานปกติ
       days++;
     }
     
@@ -347,6 +356,7 @@ router.get('/doctors', (req, res) => {
     
     return {
       ...doc,
+      working_pattern: doc.working_pattern || (doc.doctor_type === 'PART_TIME' ? 'SHIFT_BASED' : 'OFFICE_HOURS'),
       department_name: dept ? dept.name_th : 'ไม่ระบุ',
       department_code: dept ? dept.code : '',
       roles,
@@ -911,7 +921,13 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
       durationDays = 0.5;
     } else {
       const holidays = db.holidays || [];
-      durationDays = calculateDays(start_date, end_date, leaveType.count_mode, holidays);
+      const shifts = (db.doctor_shifts || []).filter(s =>
+        s.doctor_id === doctor_id &&
+        s.shift_date >= start_date &&
+        s.shift_date <= end_date &&
+        s.status === 'SCHEDULED'
+      );
+      durationDays = calculateDays(start_date, end_date, leaveType.count_mode, holidays, doc, shifts);
     }
 
     if (durationDays === 0) {
@@ -2059,10 +2075,10 @@ router.post('/holidays/seed-year', (req, res) => {
   });
 });
 
-// POST /api/calculate-duration - Preview duration calculation with holidays breakdown
+// POST /api/calculate-duration - Preview duration calculation with holidays & shift breakdown
 router.post('/calculate-duration', (req, res) => {
   const db = getDb();
-  const { start_date, end_date, half_day_type, leave_type_id } = req.body;
+  const { start_date, end_date, half_day_type, leave_type_id, doctor_id } = req.body;
 
   if (!start_date || !end_date) {
     return res.status(400).json({ error: 'กรุณาระบุวันเริ่มต้นและสิ้นสุด' });
@@ -2071,20 +2087,33 @@ router.post('/calculate-duration', (req, res) => {
   const leaveType = db.leave_types.find(lt => lt.id === leave_type_id);
   const countMode = leaveType ? leaveType.count_mode : 'CALENDAR_DAYS';
   const holidays = (db.holidays || []).filter(h => h.is_active);
+  const doctor = doctor_id ? db.doctors.find(d => d.id === doctor_id) : null;
+  const shifts = (db.doctor_shifts || []).filter(s =>
+    (!doctor_id || s.doctor_id === doctor_id) &&
+    s.shift_date >= start_date &&
+    s.shift_date <= end_date &&
+    s.status === 'SCHEDULED'
+  );
 
   if (half_day_type === 'MORNING' || half_day_type === 'AFTERNOON') {
     return res.json({
       duration_days: 0.5,
       count_mode: countMode,
-      holidays_in_range: []
+      holidays_in_range: [],
+      shifts_in_range: shifts,
+      weekend_shifts_count: 0,
+      working_pattern: doctor?.working_pattern || (doctor?.doctor_type === 'PART_TIME' ? 'SHIFT_BASED' : 'OFFICE_HOURS')
     });
   }
 
-  const duration_days = calculateDays(start_date, end_date, countMode, holidays);
+  const duration_days = calculateDays(start_date, end_date, countMode, holidays, doctor, shifts);
 
-  // Find holidays that fall within this range
+  // Find holidays and shifts that fall within this range
   const holidaySet = new Set(holidays.map(h => h.holiday_date));
   const holidaysInRange = [];
+  const shiftsInRange = [];
+  let weekendShiftsCount = 0;
+
   const start = new Date(start_date);
   const end = new Date(end_date);
   const current = new Date(start);
@@ -2094,18 +2123,32 @@ router.post('/calculate-duration', (req, res) => {
     const month = String(current.getMonth() + 1).padStart(2, '0');
     const date = String(current.getDate()).padStart(2, '0');
     const dateStr = `${year}-${month}-${date}`;
+    const dow = current.getDay();
+    const isWeekend = dow === 0 || dow === 6;
 
     if (holidaySet.has(dateStr)) {
       const hObj = holidays.find(h => h.holiday_date === dateStr);
-      holidaysInRange.push(hObj);
+      if (hObj) holidaysInRange.push(hObj);
     }
+
+    const sObj = shifts.find(s => s.shift_date === dateStr);
+    if (sObj) {
+      shiftsInRange.push(sObj);
+      if (isWeekend || holidaySet.has(dateStr)) {
+        weekendShiftsCount++;
+      }
+    }
+
     current.setDate(current.getDate() + 1);
   }
 
   res.json({
     duration_days,
     count_mode: countMode,
-    holidays_in_range: holidaysInRange
+    holidays_in_range: holidaysInRange,
+    shifts_in_range: shiftsInRange,
+    weekend_shifts_count: weekendShiftsCount,
+    working_pattern: doctor?.working_pattern || (doctor?.doctor_type === 'PART_TIME' ? 'SHIFT_BASED' : 'OFFICE_HOURS')
   });
 });
 
@@ -2289,6 +2332,42 @@ router.put('/doctors/:id/hire-date', (req, res) => {
 
   saveStore();
   res.json({ message: 'บันทึกวันเริ่มงานสำเร็จ', doctor });
+});
+
+// PUT /api/doctors/:id/working-pattern - Update doctor's working schedule pattern (OFFICE_HOURS vs SHIFT_BASED)
+router.put('/doctors/:id/working-pattern', (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+  const { working_pattern, actor_id } = req.body;
+
+  const doctor = db.doctors.find(d => d.id === id);
+  if (!doctor) {
+    return res.status(404).json({ error: 'ไม่พบข้อมูลแพทย์' });
+  }
+
+  const validPatterns = ['OFFICE_HOURS', 'SHIFT_BASED'];
+  if (!validPatterns.includes(working_pattern)) {
+    return res.status(400).json({ error: 'รูปแบบการทำงานไม่ถูกต้อง (ต้องเป็น OFFICE_HOURS หรือ SHIFT_BASED)' });
+  }
+
+  const oldPattern = doctor.working_pattern || (doctor.doctor_type === 'PART_TIME' ? 'SHIFT_BASED' : 'OFFICE_HOURS');
+  doctor.working_pattern = working_pattern;
+
+  if (!db.audit_logs) db.audit_logs = [];
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'doctors',
+    record_id: id,
+    action: 'UPDATE',
+    actor_id: actor_id || null,
+    old_data: { working_pattern: oldPattern },
+    new_data: { working_pattern },
+    ip_address: req.ip || '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+  res.json({ message: 'บันทึกรูปแบบการทำงานสำเร็จ', doctor });
 });
 
 // GET /api/tenure/preview - Preview vacation leave calculation based on tenure for a given year

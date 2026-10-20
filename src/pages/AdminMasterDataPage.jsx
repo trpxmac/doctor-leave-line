@@ -30,7 +30,8 @@ import {
   UserX,
   MessageSquare,
   Copy,
-  Building
+  Building,
+  Activity
 } from 'lucide-react';
 
 export default function AdminMasterDataPage() {
@@ -244,6 +245,30 @@ export default function AdminMasterDataPage() {
         if (docRes.ok) setDoctors(await docRes.json());
       } else {
         showToast('เกิดข้อผิดพลาดในการยกเลิก', 'error');
+      }
+    } catch {
+      showToast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+    }
+  };
+
+  // Toggle Doctor Working Pattern (OFFICE_HOURS vs SHIFT_BASED)
+  const handleToggleDoctorWorkingPattern = async (doc) => {
+    const currentPattern = doc.working_pattern || (doc.doctor_type === 'PART_TIME' ? 'SHIFT_BASED' : 'OFFICE_HOURS');
+    const newPattern = currentPattern === 'OFFICE_HOURS' ? 'SHIFT_BASED' : 'OFFICE_HOURS';
+    const label = newPattern === 'OFFICE_HOURS' ? 'จันทร์ - ศุกร์ (หยุด ส.-อา.)' : 'ตามตารางเวร (Shift-based)';
+
+    try {
+      const res = await fetch(`/api/doctors/${doc.id}/working-pattern`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ working_pattern: newPattern })
+      });
+      if (res.ok) {
+        showToast(`อัปเดตรูปแบบการทำงานของ ${doc.prefix_th || ''}${doc.first_name_th} เป็น "${label}" เรียบร้อย`);
+        const docRes = await fetch('/api/doctors');
+        if (docRes.ok) setDoctors(await docRes.json());
+      } else {
+        showToast('เกิดข้อผิดพลาดในการบันทึก', 'error');
       }
     } catch {
       showToast('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
@@ -840,6 +865,7 @@ export default function AdminMasterDataPage() {
                     <th className="py-3 px-4">แพทย์ / รหัส</th>
                     <th className="py-3 px-4">แผนก</th>
                     <th className="py-3 px-4">ประเภทแพทย์</th>
+                    <th className="py-3 px-4">รูปแบบการทำงาน (ส.-อา.)</th>
                     <th className="py-3 px-4">สถานะ LINE Official</th>
                     <th className="py-3 px-4">เบอร์โทรศัพท์</th>
                     <th className="py-3 px-4 text-right">จัดการ</th>
@@ -895,6 +921,30 @@ export default function AdminMasterDataPage() {
                             }`}>
                               {doc.doctor_type === 'FULL_TIME' ? 'ประจำ (FT)' : 'Part-Time (PT)'}
                             </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleDoctorWorkingPattern(doc)}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
+                                (doc.working_pattern || (doc.doctor_type === 'PART_TIME' ? 'SHIFT_BASED' : 'OFFICE_HOURS')) === 'OFFICE_HOURS'
+                                  ? 'bg-sky-50 text-[#006699] border-sky-200 hover:bg-sky-100 hover:border-sky-300'
+                                  : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 hover:border-purple-300'
+                              }`}
+                              title="คลิกเพื่อสลับ: จันทร์-ศุกร์ (หยุด ส.-อา.) vs ตามตารางเวร (Shift-based)"
+                            >
+                              {(doc.working_pattern || (doc.doctor_type === 'PART_TIME' ? 'SHIFT_BASED' : 'OFFICE_HOURS')) === 'OFFICE_HOURS' ? (
+                                <>
+                                  <Calendar className="w-3 h-3 text-[#006699]" />
+                                  <span>จันทร์-ศุกร์ (หยุด ส.-อา.)</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Activity className="w-3 h-3 text-purple-600" />
+                                  <span>ตามตารางเวร (Shift-based)</span>
+                                </>
+                              )}
+                            </button>
                           </td>
                           <td className="py-3 px-4">
                             {isLinked ? (
