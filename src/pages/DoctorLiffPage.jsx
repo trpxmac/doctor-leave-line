@@ -15,39 +15,153 @@ import {
   ShieldCheck,
   ShieldAlert,
   FileText,
-  CalendarDays
+  CalendarDays,
+  CalendarCheck,
+  ArrowRight,
+  Sun,
+  Sunrise,
+  Sunset,
+  Sparkles,
+  CalendarRange
 } from 'lucide-react';
 
-// Helper for Instant Real-Time Duration Calculation (Working Days vs Calendar Days)
-function getClientCalculatedDuration(startDate, endDate, halfDayType, countMode = 'WORKING_DAYS') {
-  if (!startDate) return 0;
+// Get local today date string (YYYY-MM-DD) avoiding UTC boundary issues
+function getLocalTodayString() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const date = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${date}`;
+}
+
+// Thai Date Formatter with Day of Week
+function formatThaiDate(dateStr, includeDayOfWeek = true) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-').map(Number);
+  if (parts.length !== 3) return dateStr;
+  const d = new Date(parts[0], parts[1] - 1, parts[2]);
+  if (isNaN(d.getTime())) return dateStr;
+
+  const daysOfWeek = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  const monthsTh = [
+    'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+    'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
+  ];
+
+  const dow = daysOfWeek[d.getDay()];
+  const day = d.getDate();
+  const month = monthsTh[d.getMonth()];
+  const year = d.getFullYear() + 543;
+
+  if (includeDayOfWeek) {
+    return `วัน${dow}ที่ ${day} ${month} ${year}`;
+  }
+  return `${day} ${month} ${year}`;
+}
+
+// Short Thai Date Formatter for Flight Cards
+function formatThaiDateShort(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-').map(Number);
+  if (parts.length !== 3) return dateStr;
+  const d = new Date(parts[0], parts[1] - 1, parts[2]);
+  if (isNaN(d.getTime())) return dateStr;
+
+  const daysShort = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
+  const monthsTh = [
+    'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+    'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
+  ];
+  return `${daysShort[d.getDay()]} ${d.getDate()} ${monthsTh[d.getMonth()]}`;
+}
+
+// Helper to add days to a date string (YYYY-MM-DD)
+function addDaysToDate(dateStr, daysToAdd) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-').map(Number);
+  const d = new Date(parts[0], parts[1] - 1, parts[2]);
+  d.setDate(d.getDate() + daysToAdd);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Helper to get next working day (returning to duty at hospital)
+function getNextWorkingDay(endDateStr, holidays = []) {
+  if (!endDateStr) return '';
+  const holidaySet = new Set((holidays || []).map(h => typeof h === 'string' ? h : h.holiday_date));
+  const parts = endDateStr.split('-').map(Number);
+  const d = new Date(parts[0], parts[1] - 1, parts[2]);
+  d.setDate(d.getDate() + 1);
+  while (
+    d.getDay() === 0 ||
+    d.getDay() === 6 ||
+    holidaySet.has(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
+  ) {
+    d.setDate(d.getDate() + 1);
+  }
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Helper for Real-Time Duration Calculation & Transparency Breakdown
+function getLeaveBreakdown(startDate, endDate, halfDayType, countMode = 'WORKING_DAYS', holidays = []) {
+  if (!startDate) {
+    return { totalCalendarDays: 0, weekendDays: 0, holidaysCount: 0, netDays: 0, isAllHolidays: false };
+  }
   if (halfDayType === 'MORNING' || halfDayType === 'AFTERNOON') {
-    return 0.5;
+    return { totalCalendarDays: 1, weekendDays: 0, holidaysCount: 0, netDays: 0.5, isAllHolidays: false };
   }
+
   const end = endDate || startDate;
-  const startD = new Date(startDate);
-  startD.setHours(0, 0, 0, 0);
-  const endD = new Date(end);
-  endD.setHours(0, 0, 0, 0);
+  const sParts = startDate.split('-').map(Number);
+  const eParts = end.split('-').map(Number);
+  const startD = new Date(sParts[0], sParts[1] - 1, sParts[2]);
+  const endD = new Date(eParts[0], eParts[1] - 1, eParts[2]);
 
-  if (startD > endD) return 1;
-
-  if (countMode === 'CALENDAR_DAYS') {
-    const diffTime = Math.abs(endD - startD);
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  if (startD > endD) {
+    return { totalCalendarDays: 1, weekendDays: 0, holidaysCount: 0, netDays: 1, isAllHolidays: false };
   }
 
-  // WORKING_DAYS (skip Saturday = 6 and Sunday = 0)
-  let days = 0;
+  const holidaySet = new Set((holidays || []).map(h => typeof h === 'string' ? h : h.holiday_date));
+  let totalCalendarDays = 0;
+  let weekendDays = 0;
+  let holidaysCount = 0;
+  let workingDays = 0;
+
   const current = new Date(startD);
   while (current <= endD) {
+    totalCalendarDays++;
     const dow = current.getDay();
-    if (dow !== 0 && dow !== 6) {
-      days++;
+    const isWeekend = dow === 0 || dow === 6;
+    const y = current.getFullYear();
+    const m = String(current.getMonth() + 1).padStart(2, '0');
+    const d = String(current.getDate()).padStart(2, '0');
+    const dStr = `${y}-${m}-${d}`;
+    const isHoliday = holidaySet.has(dStr);
+
+    if (isWeekend) {
+      weekendDays++;
+    } else if (isHoliday) {
+      holidaysCount++;
+    } else {
+      workingDays++;
     }
+
     current.setDate(current.getDate() + 1);
   }
-  return Math.max(1, days);
+
+  const netDays = countMode === 'CALENDAR_DAYS' ? totalCalendarDays : workingDays;
+  return {
+    totalCalendarDays,
+    weekendDays,
+    holidaysCount,
+    netDays,
+    isAllHolidays: countMode === 'WORKING_DAYS' && netDays === 0
+  };
 }
 
 export default function DoctorLiffPage() {
@@ -73,7 +187,8 @@ export default function DoctorLiffPage() {
   }, []);
 
   // Form State
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalTodayString();
+  const [leaveMode, setLeaveMode] = useState('SINGLE'); // 'SINGLE' (วันเดียว) | 'RANGE' (หลายวัน - Flight Style)
   const [startDate, setStartDate] = useState(todayStr);
   const [endDate, setEndDate] = useState(todayStr);
   const [halfDayType, setHalfDayType] = useState('FULL_DAY');
@@ -160,7 +275,8 @@ export default function DoctorLiffPage() {
   // Live Calculate Duration (with Working Days & Holidays check)
   useEffect(() => {
     if (!startDate || !selectedType) return;
-    const finalEnd = halfDayType !== 'FULL_DAY' ? startDate : (endDate || startDate);
+    const finalEnd = leaveMode === 'SINGLE' || halfDayType !== 'FULL_DAY' ? startDate : (endDate || startDate);
+    const effectiveHalfDay = leaveMode === 'SINGLE' ? halfDayType : 'FULL_DAY';
 
     const calc = async () => {
       try {
@@ -170,7 +286,7 @@ export default function DoctorLiffPage() {
           body: JSON.stringify({
             start_date: startDate,
             end_date: finalEnd,
-            half_day_type: halfDayType,
+            half_day_type: effectiveHalfDay,
             leave_type_id: selectedType.id
           })
         });
@@ -183,16 +299,17 @@ export default function DoctorLiffPage() {
       }
     };
     calc();
-  }, [startDate, endDate, halfDayType, selectedType]);
+  }, [startDate, endDate, halfDayType, selectedType, leaveMode]);
 
   // Live Shift Conflict Check (Feature #26)
   useEffect(() => {
     if (!currentDoctor || !startDate) return;
-    const finalEnd = halfDayType !== 'FULL_DAY' ? startDate : (endDate || startDate);
+    const finalEnd = leaveMode === 'SINGLE' || halfDayType !== 'FULL_DAY' ? startDate : (endDate || startDate);
+    const effectiveHalfDay = leaveMode === 'SINGLE' ? halfDayType : 'FULL_DAY';
 
     const checkShifts = async () => {
       try {
-        const res = await fetch(`/api/shifts/check-conflict?doctor_id=${currentDoctor.id}&start_date=${startDate}&end_date=${finalEnd}&half_day_type=${halfDayType}`);
+        const res = await fetch(`/api/shifts/check-conflict?doctor_id=${currentDoctor.id}&start_date=${startDate}&end_date=${finalEnd}&half_day_type=${effectiveHalfDay}`);
         if (res.ok) {
           const data = await res.json();
           setShiftConflict(data);
@@ -202,7 +319,7 @@ export default function DoctorLiffPage() {
       }
     };
     checkShifts();
-  }, [currentDoctor, startDate, endDate, halfDayType]);
+  }, [currentDoctor, startDate, endDate, halfDayType, leaveMode]);
 
   // Department Colleagues for Handover
   const departmentColleagues = (doctors || []).filter(
@@ -211,10 +328,11 @@ export default function DoctorLiffPage() {
 
   // Real-time Duration & Leave Balance Calculations
   const countMode = selectedType?.count_mode || 'WORKING_DAYS';
-  const currentFinalEnd = halfDayType !== 'FULL_DAY' ? startDate : (endDate || startDate);
-  const clientDays = getClientCalculatedDuration(startDate, currentFinalEnd, halfDayType, countMode);
-  const activeDuration = durationPreview?.duration_days !== undefined ? Number(durationPreview.duration_days) : clientDays;
-  const fullDayDuration = getClientCalculatedDuration(startDate, endDate || startDate, 'FULL_DAY', countMode);
+  const currentFinalEnd = leaveMode === 'SINGLE' || halfDayType !== 'FULL_DAY' ? startDate : (endDate || startDate);
+  const effectiveHalfDay = leaveMode === 'SINGLE' ? halfDayType : 'FULL_DAY';
+  const breakdown = getLeaveBreakdown(startDate, currentFinalEnd, effectiveHalfDay, countMode, durationPreview?.holidays_in_range);
+  const activeDuration = durationPreview?.duration_days !== undefined ? Number(durationPreview.duration_days) : breakdown.netDays;
+  const returnToWorkDate = getNextWorkingDay(currentFinalEnd, durationPreview?.holidays_in_range);
 
   const selectedBalance = balances.find(b => b.leave_type_id === selectedType?.id);
   const remainingDays = selectedBalance !== undefined ? Number(selectedBalance.remaining_days) : null;
@@ -239,6 +357,10 @@ export default function DoctorLiffPage() {
     }
 
     // Quota Full Checks
+    if (activeDuration === 0) {
+      setErrorMessage('ช่วงวันที่ท่านเลือกตรงกับวันหยุดทั้งหมด (ไม่มีวันทำการที่ต้องลา)');
+      return;
+    }
     if (isPersonalQuotaExhausted) {
       setErrorMessage(`ไม่สามารถยื่นลาได้ เนื่องจากสิทธิ์${selectedType.name_th}คงเหลือ 0 วัน (โควตาเต็ม)`);
       return;
@@ -271,12 +393,15 @@ export default function DoctorLiffPage() {
     setErrorMessage('');
 
     try {
+      const finalEnd = leaveMode === 'SINGLE' || halfDayType !== 'FULL_DAY' ? startDate : endDate;
+      const effectiveHalfDay = leaveMode === 'SINGLE' ? halfDayType : 'FULL_DAY';
+
       const formData = new FormData();
       formData.append('doctor_id', currentDoctor.id);
       formData.append('leave_type_id', selectedType.id);
       formData.append('start_date', startDate);
-      formData.append('end_date', halfDayType !== 'FULL_DAY' ? startDate : endDate);
-      formData.append('half_day_type', halfDayType);
+      formData.append('end_date', finalEnd);
+      formData.append('half_day_type', effectiveHalfDay);
       formData.append('reason', reason);
       formData.append('upload_later', uploadLater ? 'true' : 'false');
       if (substituteDoctorId) {
@@ -322,6 +447,10 @@ export default function DoctorLiffPage() {
       setSuccessResult(data);
       fetchBalances();
       refreshDoctors();
+      setLeaveMode('SINGLE');
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+      setHalfDayType('FULL_DAY');
       setReason('');
       setFiles([]);
       setUploadLater(false);
@@ -501,94 +630,333 @@ export default function DoctorLiffPage() {
           </div>
 
           {/* 2. เลือกช่วงเวลา & วันที่ */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                2. วันที่เริ่มต้นลา <span className="text-rose-500">*</span>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-700">
+                2. วันที่ต้องการลา <span className="text-rose-500">*</span>
               </label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => {
-                    const newStart = e.target.value;
-                    setStartDate(newStart);
-                    if (newStart > endDate) setEndDate(newStart);
+
+              {/* Leave Mode Switcher */}
+              <div className="inline-flex p-1 rounded-xl bg-slate-100 border border-slate-200 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLeaveMode('SINGLE');
+                    setEndDate(startDate);
                   }}
-                  className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden transition-all"
-                  required
-                />
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                    leaveMode === 'SINGLE'
+                      ? 'bg-white text-[#006699] shadow-xs font-bold'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>ลาวันเดียว</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLeaveMode('RANGE');
+                    setHalfDayType('FULL_DAY');
+                    if (endDate === startDate) {
+                      setEndDate(addDaysToDate(startDate, 1));
+                    }
+                  }}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                    leaveMode === 'RANGE'
+                      ? 'bg-white text-[#006699] shadow-xs font-bold'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <CalendarRange className="w-3.5 h-3.5" />
+                  <span>ลาหลายวัน (ช่วงวันที่)</span>
+                </button>
               </div>
             </div>
 
-            {halfDayType === 'FULL_DAY' && (
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  ถึงวันที่ (กรณีหลายวัน)
-                </label>
-                <input
-                  type="date"
-                  value={endDate}
-                  min={startDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden transition-all"
-                />
+            {/* Mode: SINGLE DAY (ลาวันเดียว) */}
+            {leaveMode === 'SINGLE' ? (
+              <div className="p-3.5 bg-gradient-to-br from-white via-sky-50/20 to-sky-50/50 rounded-2xl border border-sky-200/80 shadow-2xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-[#006699]" />
+                    วันที่ระบุลา
+                  </span>
+                  <span className="text-xs font-bold text-[#006699] bg-white px-2.5 py-0.5 rounded-full border border-sky-200 shadow-2xs">
+                    {formatThaiDate(startDate, true)}
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setStartDate(val);
+                      setEndDate(val);
+                    }}
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden transition-all font-medium text-slate-800"
+                    required
+                  />
+                </div>
+                {/* Quick single day shortcuts */}
+                <div className="flex items-center gap-1.5 pt-0.5">
+                  <span className="text-[11px] text-slate-400">เลือกเร็ว:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStartDate(todayStr);
+                      setEndDate(todayStr);
+                    }}
+                    className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 hover:border-sky-300 hover:bg-sky-50 text-slate-700 transition-colors"
+                  >
+                    วันนี้
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const tomorrow = addDaysToDate(todayStr, 1);
+                      setStartDate(tomorrow);
+                      setEndDate(tomorrow);
+                    }}
+                    className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 hover:border-sky-300 hover:bg-sky-50 text-slate-700 transition-colors"
+                  >
+                    พรุ่งนี้
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextWeek = addDaysToDate(todayStr, 7);
+                      setStartDate(nextWeek);
+                      setEndDate(nextWeek);
+                    }}
+                    className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 hover:border-sky-300 hover:bg-sky-50 text-slate-700 transition-colors"
+                  >
+                    สัปดาห์หน้า
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Mode: DATE RANGE (ช่วงวันที่ - Dual Connected Cards) */
+              <div className="p-3.5 bg-gradient-to-br from-white via-sky-50/30 to-blue-50/40 rounded-2xl border border-sky-300/80 shadow-2xs space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-11 gap-2.5 items-center">
+                  {/* Left: Start Date */}
+                  <div className="sm:col-span-5 p-3 bg-white rounded-xl border border-slate-200 hover:border-sky-300 transition-all space-y-1 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-[#006699]" />
+                        วันแรกที่ลา (เริ่มต้น)
+                      </span>
+                      <span className="text-[10px] font-bold text-[#006699] bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200">
+                        {formatThaiDateShort(startDate)}
+                      </span>
+                    </div>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => {
+                        const newStart = e.target.value;
+                        setStartDate(newStart);
+                        if (newStart > endDate) setEndDate(newStart);
+                      }}
+                      className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden transition-all font-medium text-slate-800"
+                      required
+                    />
+                  </div>
+
+                  {/* Center: Range Duration Connector */}
+                  <div className="sm:col-span-1 flex flex-col items-center justify-center py-1 sm:py-0">
+                    <div className="hidden sm:flex flex-col items-center gap-1">
+                      <div className="w-6 h-6 rounded-full bg-sky-100 flex items-center justify-center text-[#006699] shadow-2xs">
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-[10px] font-bold text-[#006699] whitespace-nowrap bg-white px-2 py-0.5 rounded-full border border-sky-200 shadow-2xs">
+                        {activeDuration} วัน
+                      </span>
+                    </div>
+                    <div className="flex sm:hidden items-center justify-center gap-2 py-0.5 w-full">
+                      <div className="h-px bg-sky-200 flex-1" />
+                      <span className="text-[11px] font-bold text-[#006699] flex items-center gap-1 bg-white px-2.5 py-0.5 rounded-full border border-sky-200 shadow-2xs">
+                        <ArrowRight className="w-3 h-3 text-[#006699]" />
+                        {activeDuration} วันทำการ
+                      </span>
+                      <div className="h-px bg-sky-200 flex-1" />
+                    </div>
+                  </div>
+
+                  {/* Right: End Date */}
+                  <div className="sm:col-span-5 p-3 bg-white rounded-xl border border-slate-200 hover:border-sky-300 transition-all space-y-1 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+                        <CalendarCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        วันสุดท้ายที่ลา (สิ้นสุด)
+                      </span>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                        {formatThaiDateShort(endDate)}
+                      </span>
+                    </div>
+                    <input
+                      type="date"
+                      value={endDate}
+                      min={startDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden transition-all font-medium text-slate-800"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Range Presets & Return to Work Info */}
+                <div className="flex items-center justify-between gap-2 flex-wrap pt-0.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] text-slate-400">เลือกช่วงเร็ว:</span>
+                    {[
+                      { label: '2 วัน', days: 1 },
+                      { label: '3 วัน', days: 2 },
+                      { label: '4 วัน', days: 3 },
+                      { label: '5 วัน (1 สัปดาห์)', days: 4 },
+                    ].map(p => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => setEndDate(addDaysToDate(startDate, p.days))}
+                        className="text-[11px] px-2.5 py-0.5 rounded-md bg-white border border-slate-200 hover:border-sky-300 hover:bg-sky-50 text-slate-700 transition-colors shadow-2xs font-medium"
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {returnToWorkDate && (
+                    <div className="text-[11px] text-slate-600 bg-white/90 px-2.5 py-1 rounded-lg border border-sky-100 flex items-center gap-1.5 shadow-2xs">
+                      <Clock className="w-3.5 h-3.5 text-[#006699]" />
+                      <span>กลับมาปฏิบัติงาน: <strong className="text-slate-800">{formatThaiDate(returnToWorkDate, false)}</strong></span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
 
-          {/* 3. รูปแบบวันลา (เต็มวัน / ครึ่งวัน) */}
-          {selectedType?.allows_half_day && (
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-bold text-slate-700">
-                  3. ระยะเวลาการลา
-                </label>
-                <span className="text-[11px] font-bold text-[#006699] bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-200 animate-in fade-in">
-                  รวมวันลา: {activeDuration} วัน
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-1.5">
-                {[
-                  { id: 'FULL_DAY', label: `เต็มวัน (${fullDayDuration.toFixed(1)} วัน)` },
-                  { id: 'MORNING', label: 'ครึ่งวันเช้า (0.5 วัน)' },
-                  { id: 'AFTERNOON', label: 'ครึ่งวันบ่าย (0.5 วัน)' }
-                ].map(opt => (
-                  <button
-                    type="button"
-                    key={opt.id}
-                    onClick={() => setHalfDayType(opt.id)}
-                    className={`py-2 px-2 rounded-lg text-xs font-medium border text-center transition-all ${halfDayType === opt.id
-                        ? 'bg-[#006699] text-white border-[#006699] shadow-xs font-bold'
-                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Live Duration Calculation Card */}
-          <div className="p-3 bg-sky-50/90 border border-sky-100 rounded-xl flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <CalendarDays className="w-4 h-4 text-[#006699]" />
-              <div>
-                <span className="font-semibold text-slate-700">คำนวณวันลาสุทธิ: </span>
-                <span className="font-bold text-[#006699] text-sm">{activeDuration} วัน</span>
-                <span className="text-[10px] text-slate-500 ml-1">
-                  ({countMode === 'WORKING_DAYS' ? 'นับเฉพาะวันทำการ' : 'นับทุกวันตามปฏิทิน'})
-                </span>
-              </div>
-            </div>
-            {durationPreview?.holidays_in_range?.length > 0 && (
-              <span
-                className="text-[10px] bg-white text-[#006699] font-bold px-2 py-0.5 rounded-full border border-sky-200"
-                title={durationPreview.holidays_in_range.map(h => `${h.holiday_date}: ${h.name_th}`).join(', ')}
-              >
-                เว้นวันหยุด รพ. {durationPreview.holidays_in_range.length} วัน
+          {/* 3. รูปแบบเวลาการลา (Time Slot) */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700">
+                3. รูปแบบเวลาการลา
+              </label>
+              <span className="text-[11px] font-bold text-[#006699] bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-200 animate-in fade-in">
+                รวมวันลา: {activeDuration} วัน
               </span>
+            </div>
+
+            {leaveMode === 'SINGLE' ? (
+              selectedType?.allows_half_day ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'FULL_DAY', label: 'เต็มวัน (1.0 วัน)', desc: 'ตลอดวันทำการ' },
+                    { id: 'MORNING', label: 'ครึ่งวันเช้า (0.5 วัน)', desc: '08:00 - 12:00' },
+                    { id: 'AFTERNOON', label: 'ครึ่งวันบ่าย (0.5 วัน)', desc: '13:00 - 17:00' }
+                  ].map(opt => (
+                    <button
+                      type="button"
+                      key={opt.id}
+                      onClick={() => setHalfDayType(opt.id)}
+                      className={`p-2.5 rounded-xl text-xs border text-center transition-all ${
+                        halfDayType === opt.id
+                          ? 'bg-[#006699] text-white border-[#006699] shadow-xs font-bold'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="font-semibold">{opt.label}</div>
+                      <div className={`text-[10px] mt-0.5 ${halfDayType === opt.id ? 'text-sky-100' : 'text-slate-400'}`}>
+                        {opt.desc}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 flex items-center gap-2">
+                  <Info className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span>ประเภทการลานี้ ({selectedType?.name_th}) กำหนดให้ลาเต็มวันเท่านั้น</span>
+                </div>
+              )
+            ) : (
+              <div className="p-3 bg-gradient-to-r from-sky-50 to-white rounded-xl border border-sky-200 text-xs text-slate-700 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-[#006699] shrink-0" />
+                  <div>
+                    <span className="font-bold text-[#006699]">เต็มวันตลอดช่วง (Full Day)</span>
+                    <p className="text-[11px] text-slate-500">ระบบคำนวณแบบเต็มวันสำหรับทุกวันทำการในช่วงที่เลือก</p>
+                  </div>
+                </div>
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-white border border-sky-200 text-[#006699] shadow-2xs">
+                  {activeDuration} วันทำการ
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Live Duration Calculation Card with Detailed Transparency Breakdown */}
+          <div className="p-3 bg-gradient-to-br from-sky-50/90 to-blue-50/60 border border-sky-200 rounded-xl space-y-2.5 text-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-[#006699]/10 text-[#006699] flex items-center justify-center shrink-0">
+                  <CalendarDays className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-500 font-medium">สรุปการคำนวณวันลาสุทธิ</div>
+                  <div className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                    <span className="text-[#006699]">{activeDuration} วัน</span>
+                    <span className="text-[10px] text-slate-500 font-normal">
+                      ({countMode === 'WORKING_DAYS' ? 'นับเฉพาะวันทำการ จันทร์-ศุกร์' : 'นับทุกวันตามปฏิทิน'})
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#006699] text-white shadow-2xs">
+                หักสิทธิ์: {activeDuration} วัน
+              </span>
+            </div>
+
+            {/* Range Breakdown Details */}
+            {leaveMode === 'RANGE' && (
+              <div className="pt-2 border-t border-sky-200/60 grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px]">
+                <div className="bg-white/90 p-2 rounded-lg border border-sky-100 text-center">
+                  <div className="text-slate-400 text-[10px]">วันปฏิทินทั้งหมด</div>
+                  <div className="font-bold text-slate-700">{breakdown.totalCalendarDays} วัน</div>
+                </div>
+                <div className="bg-white/90 p-2 rounded-lg border border-sky-100 text-center">
+                  <div className="text-slate-400 text-[10px]">วันหยุด ส.-อา.</div>
+                  <div className="font-bold text-slate-600">{breakdown.weekendDays} วัน (เว้น)</div>
+                </div>
+                <div className="bg-white/90 p-2 rounded-lg border border-sky-100 text-center">
+                  <div className="text-slate-400 text-[10px]">วันหยุด รพ.</div>
+                  <div className="font-bold text-slate-600">{breakdown.holidaysCount} วัน (เว้น)</div>
+                </div>
+                <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-200 text-center">
+                  <div className="text-emerald-700 text-[10px] font-semibold">วันลาสุทธิที่หัก</div>
+                  <div className="font-extrabold text-emerald-700">{activeDuration} วัน</div>
+                </div>
+              </div>
+            )}
+
+            {/* Holidays in range tags */}
+            {durationPreview?.holidays_in_range?.length > 0 && (
+              <div className="text-[11px] text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200 flex items-start gap-1.5 animate-in fade-in">
+                <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold">เว้นวันหยุดนักขัตฤกษ์ของ รพ. ({durationPreview.holidays_in_range.length} วัน): </span>
+                  <span>{durationPreview.holidays_in_range.map(h => `${h.name_th} (${formatThaiDateShort(h.holiday_date)})`).join(', ')}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Zero Working Days Alert */}
+            {activeDuration === 0 && (
+              <div className="text-[11px] text-rose-800 bg-rose-50 p-2 rounded-lg border border-rose-200 flex items-center gap-1.5 animate-in fade-in">
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                <span>ช่วงวันที่ท่านเลือกตรงกับวันหยุดทั้งหมด (ไม่มีวันทำการที่ต้องลา) ระบบจะไม่อนุญาตให้ส่งใบลา 0 วัน</span>
+              </div>
             )}
           </div>
 
