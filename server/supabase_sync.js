@@ -1,27 +1,62 @@
 import { supabase, isSupabaseConfigured } from './db.js';
 
+let isCloudReachable = null; // null = unprobed, true = online, false = offline
+let lastReachabilityCheck = 0;
+const HEALTH_CHECK_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes cooldown when offline
+
+/**
+ * Checks if Supabase Cloud is reachable without spamming failed requests
+ */
+export async function checkSupabaseHealth() {
+  if (!isSupabaseConfigured || !supabase) return false;
+
+  const now = Date.now();
+  // If recently probed as unreachable, stay in local offline mode during cooldown
+  if (isCloudReachable === false && (now - lastReachabilityCheck < HEALTH_CHECK_COOLDOWN_MS)) {
+    return false;
+  }
+
+  try {
+    const { error } = await supabase.from('departments').select('id').limit(1);
+    lastReachabilityCheck = Date.now();
+
+    if (error) {
+      if (isCloudReachable !== false) {
+        console.warn(`[SUPABASE] ⚠️ Cloud connection unreachable (${error.message || 'fetch failed'}). System running smoothly in Local Storage mode (store.json).`);
+      }
+      isCloudReachable = false;
+      return false;
+    }
+
+    if (isCloudReachable === false) {
+      console.log('[SUPABASE] ✅ Supabase Cloud connection restored. Cloud sync re-enabled.');
+    }
+    isCloudReachable = true;
+    return true;
+  } catch (err) {
+    lastReachabilityCheck = Date.now();
+    if (isCloudReachable !== false) {
+      console.warn(`[SUPABASE] ⚠️ Cloud connection error (${err.message}). System running smoothly in Local Storage mode (store.json).`);
+    }
+    isCloudReachable = false;
+    return false;
+  }
+}
+
 export async function loadStoreFromSupabase(fallbackDb) {
   if (!isSupabaseConfigured || !supabase) {
     return fallbackDb;
   }
   
   try {
-    console.log('🔄 Fetching latest data from Supabase Cloud...');
+    console.log('🔄 Checking Supabase Cloud connection...');
+    const healthy = await checkSupabaseHealth();
+    if (!healthy) {
+      return fallbackDb;
+    }
     
-    // Fetch all tables
-    const [
-      { data: departments },
-      { data: leave_types },
-      { data: doctors },
-      { data: doctor_roles },
-      { data: approval_routes },
-      { data: leave_balances },
-      { data: leave_requests },
-      { data: leave_attachments },
-      { data: approval_logs },
-      { data: audit_logs },
-      { data: holidays }
-    ] = await Promise.all([
+    console.log('🔄 Fetching latest data from Supabase Cloud...');
+    const results = await Promise.all([
       supabase.from('departments').select('*'),
       supabase.from('leave_types').select('*'),
       supabase.from('doctors').select('*'),
@@ -35,8 +70,27 @@ export async function loadStoreFromSupabase(fallbackDb) {
       supabase.from('holidays').select('*')
     ]);
 
-    // If we have data, use it. Otherwise, fallback to initial seed.
-    // We check if departments has data to confirm connection success.
+    // Check if any critical query had errors
+    const anyError = results.find(r => r.error);
+    if (anyError) {
+      console.warn(`⚠️ Supabase query failed (${anyError.error.message}). Using local storage.`);
+      return fallbackDb;
+    }
+
+    const [
+      { data: departments },
+      { data: leave_types },
+      { data: doctors },
+      { data: doctor_roles },
+      { data: approval_routes },
+      { data: leave_balances },
+      { data: leave_requests },
+      { data: leave_attachments },
+      { data: approval_logs },
+      { data: audit_logs },
+      { data: holidays }
+    ] = results;
+
     if (departments && departments.length > 0) {
       console.log('✅ Successfully loaded data from Supabase Cloud');
       return {
@@ -53,11 +107,11 @@ export async function loadStoreFromSupabase(fallbackDb) {
         holidays: holidays || []
       };
     } else {
-      console.warn('⚠️ Supabase tables seem empty. Proceeding with initial seed data, which will be synced to cloud on next save.');
+      console.log('ℹ️ Supabase tables are empty. Proceeding with local initial seed data.');
       return fallbackDb;
     }
   } catch (err) {
-    console.error('❌ Failed to load from Supabase:', err.message);
+    console.warn('⚠️ Could not load from Supabase Cloud:', err.message, '- Using local storage.');
     return fallbackDb;
   }
 }
@@ -65,38 +119,39 @@ export async function loadStoreFromSupabase(fallbackDb) {
 export async function syncStoreToSupabase(db) {
   if (!isSupabaseConfigured || !supabase) return;
 
+  const healthy = await checkSupabaseHealth();
+  if (!healthy) return; // Skip silently while cloud is unreachable
+
   try {
-    // Upsert all data asynchronously
-    // Note: We use Promise.all to run them concurrently for speed, but catch individual errors
-    
     const safeUpsert = async (table, data) => {
       if (!data || data.length === 0) return;
-      
-      // Clean up local-only fields if any exist before sending to Supabase
-      // In this project, the JSON schema exactly matches the SQL schema, 
-      // but we filter out fields that Supabase might reject just in case.
-      
       const { error } = await supabase.from(table).upsert(data);
       if (error) {
-        console.error(`❌ Sync error on table [${table}]:`, error.message);
+        throw new Error(`[${table}]: ${error.message}`);
       }
     };
 
-    await Promise.all([
-      safeUpsert('departments', db.departments),
-      safeUpsert('leave_types', db.leave_types),
-      safeUpsert('doctors', db.doctors),
-      safeUpsert('doctor_roles', db.doctor_roles),
-      safeUpsert('approval_routes', db.approval_routes),
-      safeUpsert('leave_balances', db.leave_balances),
-      safeUpsert('leave_requests', db.leave_requests),
-      safeUpsert('leave_attachments', db.leave_attachments),
-      safeUpsert('approval_logs', db.approval_logs),
-      safeUpsert('audit_logs', db.audit_logs),
-      safeUpsert('holidays', db.holidays)
-    ]);
-    
+    const tablesToSync = [
+      ['departments', db.departments],
+      ['leave_types', db.leave_types],
+      ['doctors', db.doctors],
+      ['doctor_roles', db.doctor_roles],
+      ['approval_routes', db.approval_routes],
+      ['leave_balances', db.leave_balances],
+      ['leave_requests', db.leave_requests],
+      ['leave_attachments', db.leave_attachments],
+      ['approval_logs', db.approval_logs],
+      ['audit_logs', db.audit_logs],
+      ['holidays', db.holidays]
+    ];
+
+    for (const [table, data] of tablesToSync) {
+      await safeUpsert(table, data);
+    }
   } catch (err) {
-    console.error('❌ Fatal error during Supabase sync:', err.message);
+    // If connection drops during sync, mark offline and backoff
+    isCloudReachable = false;
+    lastReachabilityCheck = Date.now();
+    console.warn(`[SUPABASE] ⚠️ Cloud sync paused (${err.message}). Local storage updated successfully.`);
   }
 }

@@ -21,7 +21,7 @@ export let supabase = null;
 if (isSupabaseConfigured) {
   try {
     supabase = createClient(supabaseUrl, supabaseKey);
-    console.log('✅ Connected to Supabase Cloud:', supabaseUrl);
+    console.log('📡 Supabase Client configured for:', supabaseUrl);
   } catch (err) {
     console.warn('⚠️ Supabase init failed, falling back to local database engine:', err.message);
   }
