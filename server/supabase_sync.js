@@ -140,10 +140,24 @@ export async function syncStoreToSupabase(db) {
           } = record;
           return rest;
         }
+        if (table === 'approval_logs') {
+          const { created_at, ...rest } = record;
+          return {
+            ...rest,
+            acted_at: record.acted_at || created_at || new Date().toISOString()
+          };
+        }
         return record;
       });
 
-      const { error } = await supabase.from(table).upsert(sanitized);
+      const options = {};
+      if (table === 'leave_balances') {
+        options.onConflict = 'doctor_id,leave_type_id,fiscal_year';
+      } else if (table === 'doctor_roles') {
+        options.onConflict = 'doctor_id,role';
+      }
+
+      const { error } = await supabase.from(table).upsert(sanitized, options);
       if (error) {
         throw new Error(`[${table}]: ${error.message}`);
       }

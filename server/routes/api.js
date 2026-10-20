@@ -223,6 +223,17 @@ router.get('/auth/me', (req, res) => {
   res.json({ doctor: doctor || null });
 });
 
+// Seed/Reset Mock Test Data on demand
+router.post('/mock/seed', async (req, res) => {
+  try {
+    const { generateMockData } = await import('../seed_mock_data.js');
+    const result = await generateMockData();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Search doctors by name or phone or employeeId or licenseNo for Onboarding
 router.get('/auth/search-doctors', (req, res) => {
   const db = getDb();
