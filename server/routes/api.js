@@ -613,20 +613,54 @@ router.get('/balances/:doctorId', (req, res) => {
   const doc = db.doctors.find(d => d.id === doctorId);
   if (!doc) return res.status(404).json({ error: 'Doctor not found' });
 
-  const balances = db.leave_balances
-    .filter(b => b.doctor_id === doctorId && b.fiscal_year === currentYear)
-    .map(b => {
-      const lt = db.leave_types.find(t => t.id === b.leave_type_id);
-      const total = Number(b.entitlement_days) + Number(b.carried_over_days);
-      const remaining = total - Number(b.used_days) - Number(b.pending_days);
-      return {
-        ...b,
-        leave_type_code: lt ? lt.code : '',
-        leave_type_name: lt ? lt.name_th : '',
-        total_quota: total,
-        remaining_days: Math.max(0, remaining)
+  // Find or provision balances for all active leave types
+  const activeTypes = db.leave_types.filter(lt => {
+    if (!lt.is_active) return false;
+    if (doc.doctor_type === 'PART_TIME' && lt.is_full_time_only) return false;
+    return true;
+  });
+
+  let hasNew = false;
+  const balances = activeTypes.map(lt => {
+    let b = db.leave_balances.find(b => b.doctor_id === doctorId && b.leave_type_id === lt.id && b.fiscal_year === currentYear);
+    if (!b) {
+      let defaultEntitlement = 0;
+      if (lt.code === 'VACATION') defaultEntitlement = 10;
+      else if (lt.code === 'SICK') defaultEntitlement = 30;
+      else if (lt.code === 'PERSONAL') defaultEntitlement = 5;
+      else if (lt.code === 'TRAINING') defaultEntitlement = 10;
+      else if (lt.code === 'ORDINATION') defaultEntitlement = 30;
+      else if (lt.code === 'MATERNITY') defaultEntitlement = 90;
+
+      b = {
+        id: uuidv4(),
+        doctor_id: doctorId,
+        leave_type_id: lt.id,
+        fiscal_year: currentYear,
+        entitlement_days: defaultEntitlement,
+        carried_over_days: 0,
+        used_days: 0,
+        pending_days: 0,
+        updated_at: new Date().toISOString()
       };
-    });
+      db.leave_balances.push(b);
+      hasNew = true;
+    }
+
+    const total = Number(b.entitlement_days) + Number(b.carried_over_days);
+    const remaining = total - Number(b.used_days) - Number(b.pending_days);
+    return {
+      ...b,
+      leave_type_code: lt.code,
+      leave_type_name: lt.name_th,
+      total_quota: total,
+      remaining_days: Math.max(0, remaining)
+    };
+  });
+
+  if (hasNew) {
+    saveStore();
+  }
 
   res.json(balances);
 });

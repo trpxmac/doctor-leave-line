@@ -552,7 +552,7 @@ export default function DoctorLiffPage() {
               {leaveTypes.map(lt => {
                 const isSelected = selectedType?.id === lt.id;
                 const bal = balances.find(b => b.leave_type_id === lt.id);
-                const hasQuota = bal !== undefined;
+                const hasQuota = bal !== undefined && lt.code !== 'UNPAID' && (Number(bal.total_quota) > 0 || Number(bal.used_days) > 0 || Number(bal.pending_days) > 0);
                 const isFull = hasQuota && Number(bal.remaining_days) <= 0;
 
                 return (
