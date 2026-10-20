@@ -125,7 +125,25 @@ export async function syncStoreToSupabase(db) {
   try {
     const safeUpsert = async (table, data) => {
       if (!data || data.length === 0) return;
-      const { error } = await supabase.from(table).upsert(data);
+      
+      const sanitized = data.map(record => {
+        if (!record || typeof record !== 'object') return record;
+        if (table === 'doctors') {
+          const { hire_date, working_pattern, ...rest } = record;
+          return rest;
+        }
+        if (table === 'leave_requests') {
+          const { 
+            reminder_sent_24, reminder_sent_48, 
+            attachment_reminder_sent_24, attachment_reminder_sent_due,
+            substitute_doctor_id, ...rest 
+          } = record;
+          return rest;
+        }
+        return record;
+      });
+
+      const { error } = await supabase.from(table).upsert(sanitized);
       if (error) {
         throw new Error(`[${table}]: ${error.message}`);
       }
