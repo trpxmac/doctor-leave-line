@@ -13,9 +13,13 @@ export const isLineConfigured = Boolean(LINE_CHANNEL_ACCESS_TOKEN && LINE_CHANNE
  * Send push message to LINE User (or record in simulator if token is not set)
  */
 export async function sendLinePushMessage(toLineUserId, messages) {
-  // === OVERRIDE FOR DEMO / TESTING ===
+  // === TARGET LINE USER ID RESOLUTION ===
+  // If doctor/approver has their own LINE User ID, send directly to them!
+  // If not linked yet, fallback to TEST_LINE_USER_ID for demo/testing.
   const overrideId = process.env.TEST_LINE_USER_ID;
-  const targetId = (overrideId && overrideId.length > 10) ? overrideId : toLineUserId;
+  const targetId = (toLineUserId && toLineUserId.startsWith('U')) 
+    ? toLineUserId 
+    : ((overrideId && overrideId.length > 10) ? overrideId : toLineUserId);
 
   const payload = {
     to: targetId,
