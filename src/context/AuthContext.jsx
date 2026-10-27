@@ -41,19 +41,22 @@ export function AuthProvider({ children }) {
     const initLiff = async () => {
       const liffId = import.meta.env.VITE_LIFF_ID;
       
+      // Always load doctors list first
+      await fetchDoctors();
+
       // If no valid LIFF ID, use Developer Mode (Persona Switcher)
       if (!liffId || liffId.length < 10) {
         console.log("No VITE_LIFF_ID found. Using Developer Mode (Persona Switcher).");
-        await fetchDoctors();
+        setIsLiffMode(false);
         return;
       }
 
-      setIsLiffMode(true);
       try {
         const liff = (await import('@line/liff')).default;
         await liff.init({ liffId });
         
-        if (liff.isLoggedIn()) {
+        if (liff.isInClient() && liff.isLoggedIn()) {
+          setIsLiffMode(true);
           const profile = await liff.getProfile();
           setLiffProfile(profile);
 
@@ -67,18 +70,12 @@ export function AuthProvider({ children }) {
             }
           }
         } else {
-          if (liff.isInClient()) {
-            liff.login();
-          } else {
-            console.log("Desktop browser: outside LINE client, using Developer Persona Switcher mode.");
-            setIsLiffMode(false);
-            await fetchDoctors();
-          }
+          console.log("Desktop browser: outside LINE client, using Developer Persona Switcher mode.");
+          setIsLiffMode(false);
         }
       } catch (err) {
-        console.error("LIFF Init Error:", err);
-        // Fallback to dev mode if error
-        await fetchDoctors();
+        console.error("LIFF Init Error (falling back to developer mode):", err);
+        setIsLiffMode(false);
       } finally {
         setLoading(false);
       }
@@ -88,7 +85,6 @@ export function AuthProvider({ children }) {
   }, []);
 
   const switchDoctor = (doctorId) => {
-    if (isLiffMode && !needsOnboarding) return; // Disable switcher in real LIFF mode
     const found = doctors.find(d => d.id === doctorId);
     if (found) {
       setCurrentDoctor(found);

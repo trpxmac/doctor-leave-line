@@ -817,13 +817,11 @@ export function buildCancelAlertFlex(request, doc, leaveType) {
     }
   };
 
-  return [
-    {
-      type: "flex",
-      altText: `ยกเลิกการลา: ${doc.first_name_th}`,
-      contents: flex
-    }
-  ];
+  return {
+    type: "flex",
+    altText: `ยกเลิกการลา: ${doc.first_name_th}`,
+    contents: flex
+  };
 }
 
 /**
@@ -847,8 +845,7 @@ export function buildWelcomeFlex(doctorName = '') {
             text: 'BANGKOK HOSPITAL SIRIROJ',
             color: '#93c5fd',
             size: 'xs',
-            weight: 'bold',
-            letterSpacing: '1px'
+            weight: 'bold'
           },
           {
             type: 'text',
@@ -951,8 +948,7 @@ export function buildContactCardFlex(settings = {}) {
             text: 'BANGKOK HOSPITAL SIRIROJ',
             color: '#93c5fd',
             size: 'xs',
-            weight: 'bold',
-            letterSpacing: '1px'
+            weight: 'bold'
           },
           {
             type: 'text',

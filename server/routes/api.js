@@ -1166,10 +1166,11 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     // -------------------------------------------------------------
     const appUrl = process.env.APP_URL || 'http://localhost:5173';
 
-    // 1. Send confirmation to Doctor
-    if (doc.line_user_id) {
+    // 1. Send confirmation to Doctor (fallback to TEST_LINE_USER_ID in testing/demo)
+    const doctorTargetLineId = doc.line_user_id || process.env.TEST_LINE_USER_ID;
+    if (doctorTargetLineId) {
       const docFlex = buildDoctorSubmittedFlex(newRequest, doc, leaveType);
-      await sendLinePushMessage(doc.line_user_id, docFlex);
+      await sendLinePushMessage(doctorTargetLineId, docFlex);
     }
 
     let lineQuotaError = false;
@@ -1179,10 +1180,11 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     const defaultApproverId = 'c0000000-0000-0000-0000-000000000002'; // Dr. Paravee default
     const approverId = route ? route.approver_id : defaultApproverId; 
     const approver = db.doctors.find(d => d.id === approverId);
+    const approverTargetLineId = approver?.line_user_id || (!doc.line_user_id ? process.env.TEST_LINE_USER_ID : null);
 
-    if (approver && approver.line_user_id) {
+    if (approverTargetLineId) {
       const approverFlex = buildApproverRequestFlex(newRequest, doc, leaveType, quotaInfo, appUrl);
-      const resPush = await sendLinePushMessage(approver.line_user_id, approverFlex);
+      const resPush = await sendLinePushMessage(approverTargetLineId, approverFlex);
       if (resPush.isQuotaError) {
         lineQuotaError = true;
       }
@@ -1191,9 +1193,10 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     // 3. If Emergency: Send immediate Urgent alert to P'Koong (Medical Admin)
     if (isEmergency) {
       const koong = db.doctors.find(d => d.employee_id === 'EMP-KOONG');
-      if (koong && koong.line_user_id) {
-        const emergFlex = buildEmergencyAlertFlex(newRequest, doc, leaveType, koong.phone);
-        await sendLinePushMessage(koong.line_user_id, emergFlex);
+      const koongTargetLineId = koong?.line_user_id || process.env.TEST_LINE_USER_ID;
+      if (koongTargetLineId) {
+        const emergFlex = buildEmergencyAlertFlex(newRequest, doc, leaveType, koong?.phone || '076-361888');
+        await sendLinePushMessage(koongTargetLineId, emergFlex);
       }
     }
 
@@ -1221,50 +1224,80 @@ router.post('/leave-requests/:id/cancel', async (req, res) => {
 
     const { doctor_id, reason } = req.body;
     
-    // Basic check - only the doctor who created it can cancel it
-    if (request.doctor_id !== doctor_id) {
-      return res.status(403).json({ error: 'Forbidden' });
+    // Check permission: doctor himself or Admin
+    const actorDoc = db.doctors.find(d => d.id === doctor_id);
+    const isAdmin = actorDoc?.roles?.includes('ADMIN') || actorDoc?.roles?.includes('MEDICAL_ADMIN');
+    if (request.doctor_id !== doctor_id && !isAdmin) {
+      return res.status(403).json({ error: 'คุณไม่มีสิทธิ์ยกเลิกคำขอนี้' });
     }
 
-    // Only allow canceling if PENDING
-    if (request.status !== 'PENDING') {
-      return res.status(400).json({ error: 'สามารถยกเลิกได้เฉพาะคำขอที่กำลังรออนุมัติเท่านั้น' });
+    if (request.status === 'CANCELLED') {
+      return res.status(400).json({ error: 'คำขอนี้ถูกยกเลิกไปแล้ว' });
+    }
+
+    const prevStatus = request.status;
+    request.status = 'CANCELLED';
+    request.cancelled_at = new Date().toISOString();
+    request.cancelled_reason = reason ? sanitizeInput(reason) : (isAdmin ? 'ฝ่ายการแพทย์ยกเลิกคำขอ' : 'แพทย์ยกเลิกคำขอด้วยตนเอง');
+    request.updated_at = new Date().toISOString();
+
+    // Revert covered shifts back to SCHEDULED
+    if (db.doctor_shifts) {
+      db.doctor_shifts.forEach(s => {
+        if (s.leave_request_id === request.id) {
+          s.status = 'SCHEDULED';
+          s.substitute_doctor_id = null;
+          s.leave_request_id = null;
+        }
+      });
     }
 
     // Restore balance if it's deducted from quota
     const leaveType = db.leave_types.find(lt => lt.id === request.leave_type_id);
     if (leaveType && leaveType.deducts_from_quota) {
-      const currentYear = new Date().getFullYear();
+      const reqYear = new Date(request.start_date).getFullYear();
       const balance = db.leave_balances.find(b => 
         b.doctor_id === request.doctor_id && 
         b.leave_type_id === leaveType.id && 
-        b.fiscal_year === currentYear
+        b.fiscal_year === reqYear
       );
       if (balance) {
-        balance.pending_days -= request.duration_days;
-        if (balance.pending_days < 0) balance.pending_days = 0;
+        if (prevStatus === 'PENDING') {
+          balance.pending_days = Math.max(0, Number(balance.pending_days) - Number(request.duration_days));
+        } else if (prevStatus === 'APPROVED') {
+          balance.used_days = Math.max(0, Number(balance.used_days) - Number(request.duration_days));
+        }
+        balance.updated_at = new Date().toISOString();
       }
     }
 
-    request.status = 'CANCELLED';
-    const cleanReason = reason ? sanitizeInput(reason) : 'แพทย์ยกเลิกคำขอด้วยตนเอง';
-    
     const log = {
       id: uuidv4(),
       request_id: request.id,
       step_order: request.current_step,
       action: 'CANCEL',
-      approver_id: doctor_id,
-      comments: cleanReason,
+      approver_id: doctor_id || request.doctor_id,
+      comments: request.cancelled_reason,
       acted_at: new Date().toISOString()
     };
     db.approval_logs.push(log);
 
+    db.audit_logs.push({
+      id: uuidv4(),
+      table_name: 'leave_requests',
+      record_id: request.id,
+      action: 'CANCEL',
+      actor_id: doctor_id || request.doctor_id,
+      new_data: { status: 'CANCELLED', reason: request.cancelled_reason },
+      ip_address: req.ip || '127.0.0.1',
+      created_at: new Date().toISOString()
+    });
+
     saveStore();
 
     // Send Cancel Notification to Approver
-    const doc = db.doctors.find(d => d.id === doctor_id);
-    const route = db.approval_routes.find(r => r.doctor_id === doctor_id && r.step_order === 1);
+    const doc = db.doctors.find(d => d.id === request.doctor_id);
+    const route = db.approval_routes.find(r => r.doctor_id === request.doctor_id && r.step_order === 1);
     const defaultApproverId = 'c0000000-0000-0000-0000-000000000002'; // Dr. Paravee default
     const approverId = route ? route.approver_id : defaultApproverId; 
     const approver = db.doctors.find(d => d.id === approverId);
@@ -1274,7 +1307,7 @@ router.post('/leave-requests/:id/cancel', async (req, res) => {
       await sendLinePushMessage(approver.line_user_id, flex);
     }
 
-    res.json({ success: true, message: 'ยกเลิกคำขอลาเรียบร้อยแล้ว', request });
+    res.json({ success: true, message: 'ยกเลิกคำขอลาและคืนสิทธิ์เรียบร้อยแล้ว', request });
   } catch (err) {
     console.error('Cancel Error:', err);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -1543,51 +1576,6 @@ router.post('/leave-requests/:id/override', async (req, res) => {
     res.json({ message: 'อนุมัติแทน (Override) สำเร็จ', request: reqItem });
   } catch (err) {
     console.error('Override error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/leave-requests/:id/cancel', async (req, res) => {
-  try {
-    const db = getDb();
-    const reqItem = db.leave_requests.find(r => r.id === req.params.id);
-    if (!reqItem) return res.status(404).json({ error: 'Leave request not found' });
-
-    const { doctor_id, reason = 'ขอยกเลิกคำขอ' } = req.body;
-    const prevStatus = reqItem.status;
-
-    reqItem.status = 'CANCELLED';
-    reqItem.cancelled_at = new Date().toISOString();
-    reqItem.cancelled_reason = reason;
-    reqItem.updated_at = new Date().toISOString();
-
-    const reqYear = new Date(reqItem.start_date).getFullYear();
-    const balance = db.leave_balances.find(b => b.doctor_id === reqItem.doctor_id && b.leave_type_id === reqItem.leave_type_id && b.fiscal_year === reqYear);
-    if (balance) {
-      if (prevStatus === 'PENDING') {
-        balance.pending_days = Math.max(0, Number(balance.pending_days) - Number(reqItem.duration_days));
-      } else if (prevStatus === 'APPROVED') {
-        balance.used_days = Math.max(0, Number(balance.used_days) - Number(reqItem.duration_days));
-      }
-      balance.updated_at = new Date().toISOString();
-    }
-
-    db.audit_logs.push({
-      id: uuidv4(),
-      table_name: 'leave_requests',
-      record_id: reqItem.id,
-      action: 'CANCEL',
-      actor_id: doctor_id || reqItem.doctor_id,
-      new_data: { status: 'CANCELLED', reason },
-      ip_address: req.ip || '127.0.0.1',
-      created_at: new Date().toISOString()
-    });
-
-    saveStore();
-
-    res.json({ message: 'ยกเลิกใบลาสำเร็จและคืนสิทธิ์เรียบร้อยแล้ว', request: reqItem });
-  } catch (err) {
-    console.error('Cancel error:', err);
     res.status(500).json({ error: err.message });
   }
 });
