@@ -1180,7 +1180,7 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     const defaultApproverId = 'c0000000-0000-0000-0000-000000000002'; // Dr. Paravee default
     const approverId = route ? route.approver_id : defaultApproverId; 
     const approver = db.doctors.find(d => d.id === approverId);
-    const approverTargetLineId = approver?.line_user_id || (!doc.line_user_id ? process.env.TEST_LINE_USER_ID : null);
+    const approverTargetLineId = approver?.line_user_id || process.env.TEST_LINE_USER_ID;
 
     if (approverTargetLineId) {
       const approverFlex = buildApproverRequestFlex(newRequest, doc, leaveType, quotaInfo, appUrl);
@@ -1302,9 +1302,10 @@ router.post('/leave-requests/:id/cancel', async (req, res) => {
     const approverId = route ? route.approver_id : defaultApproverId; 
     const approver = db.doctors.find(d => d.id === approverId);
 
-    if (approver && approver.line_user_id) {
+    const cancelTargetLineId = approver?.line_user_id || process.env.TEST_LINE_USER_ID;
+    if (cancelTargetLineId) {
       const flex = buildCancelAlertFlex(request, doc, leaveType);
-      await sendLinePushMessage(approver.line_user_id, flex);
+      await sendLinePushMessage(cancelTargetLineId, flex);
     }
 
     res.json({ success: true, message: 'ยกเลิกคำขอลาและคืนสิทธิ์เรียบร้อยแล้ว', request });
@@ -1424,7 +1425,8 @@ router.post('/leave-requests/:id/approve', async (req, res) => {
     // Send 1-on-1 Flex Message to Doctor
     const doc = db.doctors.find(d => d.id === reqItem.doctor_id);
     const leaveType = db.leave_types.find(lt => lt.id === reqItem.leave_type_id);
-    if (doc && doc.line_user_id) {
+    const approveTargetLineId = doc?.line_user_id || process.env.TEST_LINE_USER_ID;
+    if (approveTargetLineId) {
       const decisionFlex = buildLeaveDecisionFlex(
         reqItem,
         doc,
@@ -1433,7 +1435,7 @@ router.post('/leave-requests/:id/approve', async (req, res) => {
         approver ? `${approver.prefix_th}${approver.first_name_th} ${approver.last_name_th}` : 'หัวหน้าแผนก',
         cleanComments
       );
-      await sendLinePushMessage(doc.line_user_id, decisionFlex);
+      await sendLinePushMessage(approveTargetLineId, decisionFlex);
     }
 
     res.json({ message: 'อนุมัติใบลาสำเร็จ', request: reqItem });
@@ -1494,7 +1496,8 @@ router.post('/leave-requests/:id/reject', async (req, res) => {
     // Send 1-on-1 Flex Message to Doctor
     const doc = db.doctors.find(d => d.id === reqItem.doctor_id);
     const leaveType = db.leave_types.find(lt => lt.id === reqItem.leave_type_id);
-    if (doc && doc.line_user_id) {
+    const rejectTargetLineId = doc?.line_user_id || process.env.TEST_LINE_USER_ID;
+    if (rejectTargetLineId) {
       const decisionFlex = buildLeaveDecisionFlex(
         reqItem,
         doc,
@@ -1503,7 +1506,7 @@ router.post('/leave-requests/:id/reject', async (req, res) => {
         approver ? `${approver.prefix_th}${approver.first_name_th} ${approver.last_name_th}` : 'หัวหน้าแผนก',
         cleanComments
       );
-      await sendLinePushMessage(doc.line_user_id, decisionFlex);
+      await sendLinePushMessage(rejectTargetLineId, decisionFlex);
     }
 
     res.json({ message: 'บันทึกไม่อนุมัติสำเร็จ', request: reqItem });
@@ -1560,7 +1563,8 @@ router.post('/leave-requests/:id/override', async (req, res) => {
     // Send 1-on-1 Flex Message to Doctor
     const doc = db.doctors.find(d => d.id === reqItem.doctor_id);
     const leaveType = db.leave_types.find(lt => lt.id === reqItem.leave_type_id);
-    if (doc && doc.line_user_id) {
+    const overrideTargetLineId = doc?.line_user_id || process.env.TEST_LINE_USER_ID;
+    if (overrideTargetLineId) {
       const coordinator = db.contact_settings?.coordinator_name || 'เจ้าหน้าที่ฝ่ายการแพทย์';
       const decisionFlex = buildLeaveDecisionFlex(
         reqItem,
@@ -1570,7 +1574,7 @@ router.post('/leave-requests/:id/override', async (req, res) => {
         `${coordinator} อนุมัติแทน (ฝ่ายการแพทย์)`,
         `อนุมัติแทนกรณีฉุกเฉิน: ${reason}`
       );
-      await sendLinePushMessage(doc.line_user_id, decisionFlex);
+      await sendLinePushMessage(overrideTargetLineId, decisionFlex);
     }
 
     res.json({ message: 'อนุมัติแทน (Override) สำเร็จ', request: reqItem });
@@ -1760,9 +1764,10 @@ router.post('/line/webhook', async (req, res) => {
       }
 
       // 6. Push notification to the Doctor who submitted the leave
-      if (doc && doc.line_user_id) {
+      const webhookDocTargetId = doc?.line_user_id || process.env.TEST_LINE_USER_ID;
+      if (webhookDocTargetId) {
         const flex = buildLeaveDecisionFlex(reqItem, doc, lt, 'APPROVED', approverName, sourceComment);
-        await sendLinePushMessage(doc.line_user_id, flex);
+        await sendLinePushMessage(webhookDocTargetId, flex);
       }
     };
 
