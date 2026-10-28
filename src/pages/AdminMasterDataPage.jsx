@@ -141,11 +141,12 @@ export default function AdminMasterDataPage() {
   const handleApplyPreset = () => {
     setDoctorQuotaList(prev => prev.map(item => {
       let ent = item.entitlement_days;
-      if (item.leave_type_code === 'VACATION') ent = 10;
+      if (item.leave_type_code === 'VACATION') ent = 20;
       else if (item.leave_type_code === 'SICK') ent = 30;
-      else if (item.leave_type_code === 'PERSONAL') ent = 5;
-      else if (item.leave_type_code === 'TRAINING') ent = 10;
-      else if (item.leave_type_code === 'UNPAID') ent = '';
+      else if (item.leave_type_code === 'ORDINATION') ent = 120;
+      else if (item.leave_type_code === 'MATERNITY') ent = 90;
+      else if (item.leave_type_code === 'UNPAID') ent = 30;
+      else if (item.leave_type_code === 'PERSONAL' || item.leave_type_code === 'TRAINING' || item.leave_type_code === 'SHIFT_SWAP') ent = 0;
       return {
         ...item,
         entitlement_days: ent,
@@ -774,6 +775,24 @@ export default function AdminMasterDataPage() {
                         {lt.min_notice_days > 0 ? `${lt.min_notice_days} วัน` : 'ไม่ต้องแจ้งล่วงหน้า'}
                       </span>
                     </div>
+
+                    {lt.max_days_per_request > 0 && (
+                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                        <span className="text-[11px] text-slate-500">ลาสูงสุดต่อครั้ง:</span>
+                        <span className="font-semibold text-[#006699]">
+                          ไม่เกิน {lt.max_days_per_request} วัน
+                        </span>
+                      </div>
+                    )}
+
+                    {lt.max_requests_per_year > 0 && (
+                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                        <span className="text-[11px] text-slate-500">จำนวนครั้งต่อปี:</span>
+                        <span className="font-semibold text-violet-700">
+                          ปีละ {lt.max_requests_per_year} ครั้ง
+                        </span>
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
                       <span className="text-[11px] text-slate-500">การแนบเอกสาร:</span>
@@ -1623,7 +1642,7 @@ export default function AdminMasterDataPage() {
                 className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-sky-50 text-[#006699] border border-sky-200 rounded-lg font-bold text-[11px] shadow-2xs"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                <span>ใส่ค่ามาตรฐาน (พักผ่อน 10, ป่วย 30, กิจ 5, อบรม 10)</span>
+                <span>ใส่ค่ามาตรฐาน (พักร้อน 20, ป่วย 30, อุปสมบท 120, คลอดบุตร 90)</span>
               </button>
             </div>
 

@@ -110,7 +110,7 @@ export function buildAttachmentReminderFlex(request, doc, leaveType, status) {
             },
             {
               type: "text",
-              text: `• เอกสาร: ใบรับรองแพทย์ / หนังสือเชิญ`,
+              text: `• เอกสาร: ${leaveType.code === 'PERSONAL' ? 'ใบมรณบัตร' : leaveType.code === 'UNPAID' ? 'จดหมายเรียนถึงผู้อำนวยการ' : leaveType.code === 'SICK' ? 'ใบรับรองแพทย์' : 'ใบรับรองแพทย์ / หนังสือเชิญ'}`,
               size: "xs",
               color: "#64748b"
             }
@@ -153,8 +153,10 @@ export function initCronJobs() {
         const createdDate = new Date(req.created_at);
         const hoursDiff = (now - createdDate) / (1000 * 60 * 60);
 
-        const route = db.approval_routes.find(r => r.doctor_id === req.doctor_id && r.step_order === 1);
-        const approverId = route ? route.approver_id : 'c0000000-0000-0000-0000-000000000002';
+        const currentStep = req.current_step || 1;
+        const route = db.approval_routes.find(r => r.doctor_id === req.doctor_id && r.step_order === currentStep);
+        const defaultApproverId = currentStep === 2 ? 'c0000000-0000-0000-0000-000000000099' : 'c0000000-0000-0000-0000-000000000011';
+        const approverId = route ? route.approver_id : defaultApproverId;
         const approver = db.doctors.find(d => d.id === approverId);
 
         if (approver && approver.line_user_id) {

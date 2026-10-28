@@ -122,13 +122,13 @@ export default function DoctorHistoryPage() {
     return r.status === statusFilter;
   });
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status, req) => {
     switch (status) {
       case 'APPROVED':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            อนุมัติแล้ว
+            อนุมัติสมบูรณ์แล้ว
           </span>
         );
       case 'REJECTED':
@@ -146,10 +146,18 @@ export default function DoctorHistoryPage() {
         );
       case 'PENDING':
       default:
+        if (req?.current_step === 2) {
+          return (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 ring-1 ring-purple-300">
+              <Clock className="w-3.5 h-3.5 animate-pulse" />
+              รอ นพ.ปริวรรธน์ (ขั้นที่ 2)
+            </span>
+          );
+        }
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 ring-1 ring-amber-300">
             <Clock className="w-3.5 h-3.5 animate-pulse" />
-            รอการอนุมัติ
+            รอหัวหน้าแพทย์ (ขั้นที่ 1)
           </span>
         );
     }
@@ -344,9 +352,23 @@ export default function DoctorHistoryPage() {
                         ⚠️ ข้อยกเว้นพิเศษ
                       </span>
                     )}
+                    {req.reimbursement_requested !== null && req.reimbursement_requested !== undefined && (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+                        req.reimbursement_requested
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}>
+                        {req.reimbursement_requested ? '💰 เบิกค่าใช้จ่าย' : 'ไม่เบิกค่าใช้จ่าย'}
+                      </span>
+                    )}
+                    {req.swap_date && (
+                      <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.2 rounded">
+                        🔄 สลับวันตรวจ: {req.swap_date}
+                      </span>
+                    )}
                   </div>
                   <div>
-                    {getStatusBadge(req.status)}
+                    {getStatusBadge(req.status, req)}
                   </div>
                 </div>
 

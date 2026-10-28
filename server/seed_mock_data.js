@@ -184,18 +184,19 @@ export async function generateMockData() {
       created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
       updated_at: new Date(Date.now() - 3600000 * 2).toISOString()
     },
-    // Req 3: APPROVED - นพ. ชาติชาย ลาฝึกอบรมประชุมวิชาการ 3 วัน (ผ่านการอนุมัติแล้ว)
+    // Req 3: APPROVED - นพ. ปารวี ลาฝึกอบรมประชุมวิชาการ 3 วัน (ผ่านการอนุมัติแล้ว)
     {
       id: '88888888-8888-8888-8888-888888888803',
       request_no: `LV-${currentYear}-00003`,
-      doctor_id: 'c0000000-0000-0000-0000-000000000003', // นพ. ชาติชาย
+      doctor_id: 'c0000000-0000-0000-0000-000000000002', // นพ. ปารวี
       leave_type_id: trainingId,
       start_date: past7DaysStr,
       end_date: past5DaysStr,
       duration_days: 3.0,
       half_day_type: 'FULL_DAY',
       reason: 'เข้าร่วมประชุมวิชาการประจำปี สมาคมแพทย์โรคหัวใจแห่งประเทศไทย ประจำปี 2569 ณ โรงแรมเซ็นทารา แกรนด์ กทม.',
-      substitute_doctor_id: 'c0000000-0000-0000-0000-000000000002', // นพ. ปารวี
+      substitute_doctor_id: 'c0000000-0000-0000-0000-000000000003', // นพ. ชาติชาย
+      reimbursement_requested: true,
       is_emergency: false,
       is_exception: false,
       upload_later: false,
@@ -345,20 +346,22 @@ export async function generateMockData() {
 
   const leave_balances = [
     // --- Dr. Chartchai (FT) ---
-    // พักผ่อน: สิทธิ์ 10 + ยกยอด 2 = 12 วัน, ใช้ไป 0, รอดำเนินการ 2.5 วัน (Req 1: 2.0 วัน + Req 7: 0.5 วัน)
-    updateOrCreateBalance('c0000000-0000-0000-0000-000000000003', vacationId, 10.0, 2.0, 0.0, 2.5),
+    // พักร้อน: สิทธิ์ 20 วัน, ใช้ไป 0, รอดำเนินการ 2.5 วัน (Req 1: 2.0 วัน + Req 7: 0.5 วัน)
+    updateOrCreateBalance('c0000000-0000-0000-0000-000000000003', vacationId, 20.0, 0.0, 0.0, 2.5),
     // ลาป่วย: สิทธิ์ 30 วัน, ใช้ไป 0, รอ 0
     updateOrCreateBalance('c0000000-0000-0000-0000-000000000003', sickId, 30.0, 0.0, 0.0, 0.0),
-    // ลากิจ: สิทธิ์ 5 วัน, ใช้ไป 0, รอ 0 (Req 5 ถูก Reject ไม่ตัดยอด)
-    updateOrCreateBalance('c0000000-0000-0000-0000-000000000003', personalId, 5.0, 0.0, 0.0, 0.0),
-    // ฝึกอบรม: สิทธิ์ 10 วัน, ใช้ไป 3.0 วัน (Req 3 Approved), รอ 0
-    updateOrCreateBalance('c0000000-0000-0000-0000-000000000003', trainingId, 10.0, 0.0, 3.0, 0.0),
+    // ลากิจ (ครอบครัวเสียชีวิต): สิทธิ์ตามเกณฑ์, ใช้ไป 0, รอ 0 (Req 5 ถูก Reject ไม่ตัดยอด)
+    updateOrCreateBalance('c0000000-0000-0000-0000-000000000003', personalId, 0.0, 0.0, 0.0, 0.0),
+    // ฝึกอบรม: ใช้ได้ 1 ครั้ง/ปี, ใช้ไป 0, รอ 0
+    updateOrCreateBalance('c0000000-0000-0000-0000-000000000003', trainingId, 0.0, 0.0, 0.0, 0.0),
 
     // --- Dr. Paravee (FT - Head) ---
-    // พักผ่อน: สิทธิ์ 15 + ยกยอด 5 = 20 วัน, ใช้ไป 2.0 วัน (Req 4 Approved), รอ 0
-    updateOrCreateBalance('c0000000-0000-0000-0000-000000000002', vacationId, 15.0, 5.0, 2.0, 0.0),
+    // พักร้อน: สิทธิ์ 20 วัน, ใช้ไป 2.0 วัน (Req 4 Approved), รอ 0
+    updateOrCreateBalance('c0000000-0000-0000-0000-000000000002', vacationId, 20.0, 0.0, 2.0, 0.0),
     // ป่วย: สิทธิ์ 30 วัน, ใช้ไป 0, รอ 0
     updateOrCreateBalance('c0000000-0000-0000-0000-000000000002', sickId, 30.0, 0.0, 0.0, 0.0),
+    // ฝึกอบรม: ใช้ไป 3.0 วัน (Req 3 Approved)
+    updateOrCreateBalance('c0000000-0000-0000-0000-000000000002', trainingId, 0.0, 0.0, 3.0, 0.0),
 
     // --- Dr. Kantheera (PT) ---
     // ป่วย: สิทธิ์ 30 วัน, ใช้ไป 0, รอดำเนินการ 1.0 วัน (Req 2 ป่วยฉุกเฉิน Pending)

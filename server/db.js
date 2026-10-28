@@ -4,6 +4,12 @@ import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import {
+  departments as masterDepartments,
+  doctors as masterDoctors,
+  doctor_roles as masterDoctorRoles,
+  approval_routes as masterApprovalRoutes
+} from './hospital_flow_data.js';
 
 dotenv.config();
 
@@ -29,61 +35,23 @@ if (isSupabaseConfigured) {
 
 // Initial Seed Data matching D:\supabase_schema.sql
 const getInitialSeedData = () => {
-  const departments = [
-    {
-      id: 'd1111111-1111-1111-1111-111111111111',
-      code: 'MED',
-      name_th: 'อายุรกรรม',
-      name_en: 'Internal Medicine',
-      min_staff_required: 5,
-      max_leave_per_day: 3,
-      is_active: true,
-      created_at: new Date().toISOString()
-    },
-    {
-      id: 'd2222222-2222-2222-2222-222222222222',
-      code: 'SURG',
-      name_th: 'ศัลยกรรม',
-      name_en: 'Surgery',
-      min_staff_required: 4,
-      max_leave_per_day: 2,
-      is_active: true,
-      created_at: new Date().toISOString()
-    },
-    {
-      id: 'd3333333-3333-3333-3333-333333333333',
-      code: 'ER',
-      name_th: 'อุบัติเหตุและฉุกเฉิน',
-      name_en: 'Emergency Room',
-      min_staff_required: 6,
-      max_leave_per_day: 2,
-      is_active: true,
-      created_at: new Date().toISOString()
-    },
-    {
-      id: 'd4444444-4444-4444-4444-444444444444',
-      code: 'OBGYN',
-      name_th: 'สูติ-นรีเวชกรรม',
-      name_en: 'Obstetrics and Gynecology',
-      min_staff_required: 3,
-      max_leave_per_day: 1,
-      is_active: true,
-      created_at: new Date().toISOString()
-    }
-  ];
+  const departments = masterDepartments;
 
   const leave_types = [
     {
       id: '11111111-1111-1111-1111-111111111111',
       code: 'VACATION',
-      name_th: 'ลาพักผ่อน',
+      name_th: 'ลาพักร้อน',
       name_en: 'Annual Leave',
-      count_mode: 'WORKING_DAYS',
+      count_mode: 'CALENDAR_DAYS',
       allows_half_day: true,
       requires_attachment: false,
       attachment_threshold_days: 0,
       attachment_deadline_days: 0,
       min_notice_days: 7,
+      max_days_per_request: 10,
+      min_tenure_months: 6,
+      min_work_days_in_month: 15,
       allows_backdate: false,
       is_full_time_only: true,
       sort_order: 1,
@@ -95,12 +63,13 @@ const getInitialSeedData = () => {
       code: 'SICK',
       name_th: 'ลาป่วย',
       name_en: 'Sick Leave',
-      count_mode: 'WORKING_DAYS',
+      count_mode: 'CALENDAR_DAYS',
       allows_half_day: true,
       requires_attachment: true,
       attachment_threshold_days: 2.0,
       attachment_deadline_days: 3,
       min_notice_days: 0,
+      max_days_per_request: null,
       allows_backdate: true,
       is_full_time_only: false,
       sort_order: 2,
@@ -110,16 +79,17 @@ const getInitialSeedData = () => {
     {
       id: '33333333-3333-3333-3333-333333333333',
       code: 'PERSONAL',
-      name_th: 'ลากิจ',
-      name_en: 'Personal Leave',
-      count_mode: 'WORKING_DAYS',
+      name_th: 'ลากิจ (ครอบครัวเสียชีวิต)',
+      name_en: 'Bereavement / Personal Leave',
+      count_mode: 'CALENDAR_DAYS',
       allows_half_day: true,
-      requires_attachment: false,
+      requires_attachment: true,
       attachment_threshold_days: 0,
-      attachment_deadline_days: 0,
-      min_notice_days: 3,
-      allows_backdate: false,
-      is_full_time_only: true,
+      attachment_deadline_days: 7,
+      min_notice_days: 0,
+      max_days_per_request: null,
+      allows_backdate: true,
+      is_full_time_only: false,
       sort_order: 3,
       is_active: true,
       color: '#f59e0b'
@@ -127,14 +97,17 @@ const getInitialSeedData = () => {
     {
       id: '44444444-4444-4444-4444-444444444444',
       code: 'TRAINING',
-      name_th: 'ลาฝึกอบรม / ประชุมวิชาการ',
+      name_th: 'ลาฝึกอบรม/ประชุมวิชาการ',
       name_en: 'Training / Conference',
-      count_mode: 'WORKING_DAYS',
+      count_mode: 'CALENDAR_DAYS',
       allows_half_day: false,
       requires_attachment: true,
       attachment_threshold_days: 0,
       attachment_deadline_days: 14,
-      min_notice_days: 14,
+      min_notice_days: 7,
+      max_days_per_request: null,
+      max_requests_per_year: 1,
+      has_reimbursement_option: true,
       allows_backdate: false,
       is_full_time_only: false,
       sort_order: 4,
@@ -144,14 +117,15 @@ const getInitialSeedData = () => {
     {
       id: '55555555-5555-5555-5555-555555555555',
       code: 'UNPAID',
-      name_th: 'ลาไม่รับค่าตอบแทน / งดออกตรวจ',
+      name_th: 'ลาไม่รับค่าตอบแทน',
       name_en: 'Leave Without Pay',
-      count_mode: 'WORKING_DAYS',
+      count_mode: 'CALENDAR_DAYS',
       allows_half_day: true,
-      requires_attachment: false,
+      requires_attachment: true,
       attachment_threshold_days: 0,
       attachment_deadline_days: 3,
-      min_notice_days: 3,
+      min_notice_days: 0,
+      max_days_per_request: 30,
       allows_backdate: false,
       is_full_time_only: false,
       sort_order: 5,
@@ -169,6 +143,7 @@ const getInitialSeedData = () => {
       attachment_threshold_days: 0,
       attachment_deadline_days: 30,
       min_notice_days: 30,
+      max_days_per_request: 120,
       allows_backdate: false,
       is_full_time_only: true,
       sort_order: 6,
@@ -186,250 +161,63 @@ const getInitialSeedData = () => {
       attachment_threshold_days: 0,
       attachment_deadline_days: 30,
       min_notice_days: 0,
+      max_days_per_request: 90,
       allows_backdate: true,
       is_full_time_only: true,
       sort_order: 7,
       is_active: true,
       color: '#ec4899'
+    },
+    {
+      id: '88888888-8888-8888-8888-888888888889',
+      code: 'SHIFT_SWAP',
+      name_th: 'ลาสลับวันออกตรวจ',
+      name_en: 'Clinic Schedule Swap Leave',
+      count_mode: 'CALENDAR_DAYS',
+      allows_half_day: true,
+      requires_attachment: false,
+      attachment_threshold_days: 0,
+      attachment_deadline_days: 3,
+      min_notice_days: 0,
+      max_days_per_request: null,
+      allows_backdate: false,
+      is_full_time_only: false,
+      sort_order: 8,
+      is_active: true,
+      color: '#10b981'
     }
   ];
 
-  const doctors = [
-    {
-      id: 'c0000000-0000-0000-0000-000000000001',
-      employee_id: 'EMP-KOONG',
-      license_no: null,
-      line_user_id: 'U_KOONG_LINE_ADMIN',
-      prefix_th: 'คุณ',
-      first_name_th: 'สิริมาศ',
-      last_name_th: 'ฝ่ายการแพทย์',
-      doctor_type: 'FULL_TIME',
-      department_id: 'd1111111-1111-1111-1111-111111111111',
-      phone: '076-361888',
-      email: 'koong_med@bsi.hospital',
-      hire_date: '2018-05-01',
-      is_active: true,
-      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-      created_at: new Date().toISOString()
-    },
-    {
-      id: 'c0000000-0000-0000-0000-000000000002',
-      employee_id: 'DOC-001',
-      license_no: 'ว. 34567',
-      line_user_id: 'U_DR_PARAVEE_HEAD',
-      prefix_th: 'นพ.',
-      first_name_th: 'ปารวี',
-      last_name_th: 'ชาญวิทย์',
-      doctor_type: 'FULL_TIME',
-      department_id: 'd1111111-1111-1111-1111-111111111111',
-      phone: '081-1112233',
-      email: 'paravee.c@bsi.hospital',
-      hire_date: '2020-01-15',
-      is_active: true,
-      avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=150&auto=format&fit=crop&q=80',
-      created_at: new Date().toISOString()
-    },
-    {
-      id: 'c0000000-0000-0000-0000-000000000003',
-      employee_id: 'DOC-002',
-      license_no: 'ว. 48921',
-      line_user_id: 'U_DR_CHARTCHAI',
-      prefix_th: 'นพ.',
-      first_name_th: 'ชาติชาย',
-      last_name_th: 'วิสัยทัศน์',
-      doctor_type: 'FULL_TIME',
-      department_id: 'd1111111-1111-1111-1111-111111111111',
-      phone: '082-2223344',
-      email: 'chartchai.v@bsi.hospital',
-      hire_date: '2023-06-01',
-      is_active: true,
-      avatar: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=150&auto=format&fit=crop&q=80',
-      created_at: new Date().toISOString()
-    },
-    {
-      id: 'c0000000-0000-0000-0000-000000000004',
-      employee_id: 'DOC-003',
-      license_no: 'ว. 56214',
-      line_user_id: 'U_DR_KANTHEERA_PT',
-      prefix_th: 'พญ.',
-      first_name_th: 'กันต์ธีรา',
-      last_name_th: 'พิทักษ์ชีพ',
-      doctor_type: 'PART_TIME',
-      department_id: 'd1111111-1111-1111-1111-111111111111',
-      phone: '083-3334455',
-      email: 'kantheera.p@bsi.hospital',
-      hire_date: '2025-11-01',
-      is_active: true,
-      avatar: 'https://images.unsplash.com/photo-1594824813583-0570b240186c?w=150&auto=format&fit=crop&q=80',
-      created_at: new Date().toISOString()
-    }
-  ];
-
-  const doctor_roles = [
-    { id: '00000000-0000-0000-0000-000000001000', doctor_id: 'c0000000-0000-0000-0000-000000000001', role: 'MEDICAL_ADMIN' },
-    { id: '00000000-0000-0000-0000-000000001001', doctor_id: 'c0000000-0000-0000-0000-000000000002', role: 'DEPT_HEAD' },
-    { id: '00000000-0000-0000-0000-000000001002', doctor_id: 'c0000000-0000-0000-0000-000000000002', role: 'DOCTOR' },
-    { id: '00000000-0000-0000-0000-000000001003', doctor_id: 'c0000000-0000-0000-0000-000000000003', role: 'DOCTOR' },
-    { id: '00000000-0000-0000-0000-000000001004', doctor_id: 'c0000000-0000-0000-0000-000000000004', role: 'DOCTOR' }
-  ];
-
-  const approval_routes = [
-    {
-      id: '00000000-0000-0000-0000-000000001005',
-      doctor_id: 'c0000000-0000-0000-0000-000000000003',
-      step_order: 1,
-      approver_id: 'c0000000-0000-0000-0000-000000000002', // Dr. Paravee
-      is_active: true
-    },
-    {
-      id: '00000000-0000-0000-0000-000000001006',
-      doctor_id: 'c0000000-0000-0000-0000-000000000004',
-      step_order: 1,
-      approver_id: 'c0000000-0000-0000-0000-000000000002', // Dr. Paravee
-      is_active: true
-    }
-  ];
+  const doctors = masterDoctors;
+  const doctor_roles = masterDoctorRoles;
+  const approval_routes = masterApprovalRoutes;
 
   const currentYear = new Date().getFullYear();
 
-  // Balances for Dr. Chartchai (FT) and Dr. Kantheera (PT)
-  const leave_balances = [
-    // Dr. Chartchai (FT)
-    {
-      id: '00000000-0000-0000-0000-000000001007',
-      doctor_id: 'c0000000-0000-0000-0000-000000000003',
-      leave_type_id: '11111111-1111-1111-1111-111111111111',
-      fiscal_year: currentYear,
-      entitlement_days: 10.0,
-      carried_over_days: 2.0,
-      used_days: 2.0,
-      pending_days: 0.0,
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: '00000000-0000-0000-0000-000000001008',
-      doctor_id: 'c0000000-0000-0000-0000-000000000003',
-      leave_type_id: '22222222-2222-2222-2222-222222222222',
-      fiscal_year: currentYear,
-      entitlement_days: 30.0,
-      carried_over_days: 0.0,
-      used_days: 1.0,
-      pending_days: 0.0,
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: '00000000-0000-0000-0000-000000001009',
-      doctor_id: 'c0000000-0000-0000-0000-000000000003',
-      leave_type_id: '33333333-3333-3333-3333-333333333333',
-      fiscal_year: currentYear,
-      entitlement_days: 5.0,
-      carried_over_days: 0.0,
-      used_days: 0.0,
-      pending_days: 0.0,
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: '00000000-0000-0000-0000-000000001010',
-      doctor_id: 'c0000000-0000-0000-0000-000000000003',
-      leave_type_id: '44444444-4444-4444-4444-444444444444',
-      fiscal_year: currentYear,
-      entitlement_days: 10.0,
-      carried_over_days: 0.0,
-      used_days: 0.0,
-      pending_days: 0.0,
-      updated_at: new Date().toISOString()
-    },
-    // Dr. Paravee (FT)
-    {
-      id: '00000000-0000-0000-0000-000000001011',
-      doctor_id: 'c0000000-0000-0000-0000-000000000002',
-      leave_type_id: '11111111-1111-1111-1111-111111111111',
-      fiscal_year: currentYear,
-      entitlement_days: 15.0,
-      carried_over_days: 5.0,
-      used_days: 4.0,
-      pending_days: 0.0,
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: '00000000-0000-0000-0000-000000001012',
-      doctor_id: 'c0000000-0000-0000-0000-000000000002',
-      leave_type_id: '22222222-2222-2222-2222-222222222222',
-      fiscal_year: currentYear,
-      entitlement_days: 30.0,
-      carried_over_days: 0.0,
-      used_days: 0.0,
-      pending_days: 0.0,
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: '00000000-0000-0000-0000-000000001013',
-      doctor_id: 'c0000000-0000-0000-0000-000000000002',
-      leave_type_id: '33333333-3333-3333-3333-333333333333',
-      fiscal_year: currentYear,
-      entitlement_days: 5.0,
-      carried_over_days: 0.0,
-      used_days: 0.0,
-      pending_days: 0.0,
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: '00000000-0000-0000-0000-000000001014',
-      doctor_id: 'c0000000-0000-0000-0000-000000000002',
-      leave_type_id: '44444444-4444-4444-4444-444444444444',
-      fiscal_year: currentYear,
-      entitlement_days: 10.0,
-      carried_over_days: 0.0,
-      used_days: 0.0,
-      pending_days: 0.0,
-      updated_at: new Date().toISOString()
-    },
-    // Khun Sirimas (P'Koong, FT - Admin)
-    {
-      id: '00000000-0000-0000-0000-000000001015',
-      doctor_id: 'c0000000-0000-0000-0000-000000000001',
-      leave_type_id: '11111111-1111-1111-1111-111111111111',
-      fiscal_year: currentYear,
-      entitlement_days: 12.0,
-      carried_over_days: 0.0,
-      used_days: 0.0,
-      pending_days: 0.0,
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: '00000000-0000-0000-0000-000000001016',
-      doctor_id: 'c0000000-0000-0000-0000-000000000001',
-      leave_type_id: '22222222-2222-2222-2222-222222222222',
-      fiscal_year: currentYear,
-      entitlement_days: 30.0,
-      carried_over_days: 0.0,
-      used_days: 0.0,
-      pending_days: 0.0,
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: '00000000-0000-0000-0000-000000001017',
-      doctor_id: 'c0000000-0000-0000-0000-000000000001',
-      leave_type_id: '33333333-3333-3333-3333-333333333333',
-      fiscal_year: currentYear,
-      entitlement_days: 5.0,
-      carried_over_days: 0.0,
-      used_days: 0.0,
-      pending_days: 0.0,
-      updated_at: new Date().toISOString()
-    },
-    {
-      id: '00000000-0000-0000-0000-000000001018',
-      doctor_id: 'c0000000-0000-0000-0000-000000000001',
-      leave_type_id: '44444444-4444-4444-4444-444444444444',
-      fiscal_year: currentYear,
-      entitlement_days: 10.0,
-      carried_over_days: 0.0,
-      used_days: 0.0,
-      pending_days: 0.0,
-      updated_at: new Date().toISOString()
-    }
-  ];
+  // Dynamic initial balances for all doctors
+  const leave_balances = [];
+  doctors.forEach(doc => {
+    leave_types.forEach(lt => {
+      let entitlement = 0;
+      if (lt.code === 'VACATION') entitlement = doc.doctor_type === 'PART_TIME' ? 0 : 20;
+      else if (lt.code === 'SICK') entitlement = 30;
+      else if (lt.code === 'ORDINATION') entitlement = 120;
+      else if (lt.code === 'MATERNITY') entitlement = 90;
+      else if (lt.code === 'UNPAID') entitlement = 30;
+
+      leave_balances.push({
+        id: `bal-${doc.id.slice(0, 8)}-${lt.code.toLowerCase()}-${currentYear}`,
+        doctor_id: doc.id,
+        leave_type_id: lt.id,
+        fiscal_year: currentYear,
+        entitlement_days: entitlement,
+        carried_over_days: 0,
+        used_days: 0,
+        pending_days: 0,
+        updated_at: new Date().toISOString()
+      });
+    });
+  });
 
   // Sample Leave Requests for Demo
   const todayStr = new Date().toISOString().split('T')[0];
@@ -506,11 +294,8 @@ const getInitialSeedData = () => {
   const leave_attachments = [];
 
   const tenure_rules = [
-    { id: '1', min_years: 0, max_years: 1, entitlement_days: 6.0, prorate_monthly: 0.5, description: 'ทำงานไม่ถึง 1 ปี (ได้ตามสัดส่วน 0.5 วัน/เดือนทำงาน)' },
-    { id: '2', min_years: 1, max_years: 3, entitlement_days: 6.0, prorate_monthly: 0, description: 'ทำงาน 1 - 3 ปี (สิทธิ์ 6 วันทำการ)' },
-    { id: '3', min_years: 3, max_years: 5, entitlement_days: 10.0, prorate_monthly: 0, description: 'ทำงาน 3 - 5 ปี (สิทธิ์ 10 วันทำการ)' },
-    { id: '4', min_years: 5, max_years: 10, entitlement_days: 12.0, prorate_monthly: 0, description: 'ทำงาน 5 - 10 ปี (สิทธิ์ 12 วันทำการ)' },
-    { id: '5', min_years: 10, max_years: 99, entitlement_days: 15.0, prorate_monthly: 0, description: 'ทำงาน 10 ปีขึ้นไป (สิทธิ์ 15 วันทำการ)' }
+    { id: '1', min_years: 0, max_years: 0.5, entitlement_days: 0.0, prorate_monthly: 0, description: 'ทำงานไม่ถึง 6 เดือน (ยังไม่สามารถใช้สิทธิ์ลาพักร้อนได้)' },
+    { id: '2', min_years: 0.5, max_years: 99, entitlement_days: 20.0, prorate_monthly: 0, description: 'ทำงานครบ 6 เดือนขึ้นไป เฉพาะ Full-time (สิทธิ์ 20 วัน/ปี คำนวณตามปฏิทิน)' }
   ];
 
   const tenure_settings = {
@@ -658,17 +443,79 @@ export const initStore = async () => {
   
   // Ensure tenure_rules, tenure_settings, contact_settings exist
   const seed = getInitialSeedData();
-  if (!db.tenure_rules) db.tenure_rules = seed.tenure_rules;
+  if (!db.tenure_rules || db.tenure_rules.some(r => r.entitlement_days === 6 && r.min_years === 1)) {
+    db.tenure_rules = seed.tenure_rules;
+  }
   if (!db.tenure_settings) db.tenure_settings = seed.tenure_settings;
   if (!db.contact_settings) db.contact_settings = seed.contact_settings;
   if (!db.doctor_shifts) db.doctor_shifts = seed.doctor_shifts;
-  
-  // Ensure all doctors have hire_date
+
+  // Migrate/sync leave_types with latest policy requirements
+  if (!db.leave_types) {
+    db.leave_types = seed.leave_types;
+  } else {
+    seed.leave_types.forEach(seedLt => {
+      const existing = db.leave_types.find(lt => lt.code === seedLt.code || lt.id === seedLt.id);
+      if (existing) {
+        existing.name_th = seedLt.name_th;
+        existing.name_en = seedLt.name_en;
+        existing.count_mode = seedLt.count_mode;
+        existing.requires_attachment = seedLt.requires_attachment;
+        existing.attachment_threshold_days = seedLt.attachment_threshold_days;
+        existing.min_notice_days = seedLt.min_notice_days;
+        existing.max_days_per_request = seedLt.max_days_per_request;
+        existing.allows_backdate = seedLt.allows_backdate;
+        existing.is_full_time_only = seedLt.is_full_time_only;
+        if (seedLt.max_requests_per_year !== undefined) existing.max_requests_per_year = seedLt.max_requests_per_year;
+        if (seedLt.has_reimbursement_option !== undefined) existing.has_reimbursement_option = seedLt.has_reimbursement_option;
+        if (seedLt.min_tenure_months !== undefined) existing.min_tenure_months = seedLt.min_tenure_months;
+        if (seedLt.min_work_days_in_month !== undefined) existing.min_work_days_in_month = seedLt.min_work_days_in_month;
+      } else {
+        db.leave_types.push(seedLt);
+      }
+    });
+  }
+
+  // Ensure all doctors have hire_date & up-to-date balances for all leave types
+  const currentYear = new Date().getFullYear();
   db.doctors.forEach(d => {
     if (!d.hire_date) {
       const match = seed.doctors.find(sd => sd.id === d.id);
       d.hire_date = match?.hire_date || '2023-01-01';
     }
+    db.leave_types.forEach(lt => {
+      let bal = db.leave_balances.find(b => b.doctor_id === d.id && b.leave_type_id === lt.id && b.fiscal_year === currentYear);
+      let defaultEntitlement = 0;
+      if (lt.code === 'VACATION') defaultEntitlement = d.doctor_type === 'PART_TIME' ? 0 : 20;
+      else if (lt.code === 'SICK') defaultEntitlement = 30;
+      else if (lt.code === 'ORDINATION') defaultEntitlement = 120;
+      else if (lt.code === 'MATERNITY') defaultEntitlement = 90;
+      else if (lt.code === 'UNPAID') defaultEntitlement = 30;
+
+      if (!bal) {
+        db.leave_balances.push({
+          id: `bal-${d.id.slice(0, 8)}-${lt.code.toLowerCase()}-${currentYear}`,
+          doctor_id: d.id,
+          leave_type_id: lt.id,
+          fiscal_year: currentYear,
+          entitlement_days: defaultEntitlement,
+          carried_over_days: 0,
+          used_days: 0,
+          pending_days: 0,
+          updated_at: new Date().toISOString()
+        });
+      } else {
+        if (lt.code === 'VACATION' && d.doctor_type !== 'PART_TIME' && bal.entitlement_days < 20) {
+          bal.entitlement_days = 20;
+        } else if (lt.code === 'ORDINATION' && bal.entitlement_days === 0) {
+          bal.entitlement_days = 120;
+        } else if (lt.code === 'MATERNITY' && bal.entitlement_days === 0) {
+          bal.entitlement_days = 90;
+        } else if (lt.code === 'UNPAID' && bal.entitlement_days === 0) {
+          bal.entitlement_days = 30;
+        }
+      }
+    });
   });
 
   // Save the merged/fetched data back to local store

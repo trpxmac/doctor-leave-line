@@ -17,6 +17,8 @@ import {
   buildDoctorSubmittedFlex,
   buildApproverRequestFlex,
   buildLeaveDecisionFlex,
+  buildDoctorStep1ApprovedFlex,
+  buildMedicalAdminNotificationFlex,
   buildEmergencyAlertFlex,
   buildCancelAlertFlex,
   buildWelcomeFlex,
@@ -558,6 +560,11 @@ router.put('/leave-types/:id', (req, res) => {
   if (updates.attachment_threshold_days !== undefined) db.leave_types[index].attachment_threshold_days = Number(updates.attachment_threshold_days);
   if (updates.attachment_deadline_days !== undefined) db.leave_types[index].attachment_deadline_days = Number(updates.attachment_deadline_days);
   if (updates.min_notice_days !== undefined) db.leave_types[index].min_notice_days = Number(updates.min_notice_days);
+  if (updates.max_days_per_request !== undefined) db.leave_types[index].max_days_per_request = updates.max_days_per_request ? Number(updates.max_days_per_request) : null;
+  if (updates.max_requests_per_year !== undefined) db.leave_types[index].max_requests_per_year = updates.max_requests_per_year ? Number(updates.max_requests_per_year) : null;
+  if (updates.has_reimbursement_option !== undefined) db.leave_types[index].has_reimbursement_option = Boolean(updates.has_reimbursement_option);
+  if (updates.min_tenure_months !== undefined) db.leave_types[index].min_tenure_months = updates.min_tenure_months ? Number(updates.min_tenure_months) : 0;
+  if (updates.min_work_days_in_month !== undefined) db.leave_types[index].min_work_days_in_month = updates.min_work_days_in_month ? Number(updates.min_work_days_in_month) : 0;
   if (updates.allows_backdate !== undefined) db.leave_types[index].allows_backdate = Boolean(updates.allows_backdate);
   if (updates.is_full_time_only !== undefined) db.leave_types[index].is_full_time_only = Boolean(updates.is_full_time_only);
   if (updates.color) db.leave_types[index].color = updates.color;
@@ -625,12 +632,11 @@ router.get('/balances/:doctorId', (req, res) => {
     let b = db.leave_balances.find(b => b.doctor_id === doctorId && b.leave_type_id === lt.id && b.fiscal_year === currentYear);
     if (!b) {
       let defaultEntitlement = 0;
-      if (lt.code === 'VACATION') defaultEntitlement = 10;
+      if (lt.code === 'VACATION') defaultEntitlement = doc.doctor_type === 'PART_TIME' ? 0 : 20;
       else if (lt.code === 'SICK') defaultEntitlement = 30;
-      else if (lt.code === 'PERSONAL') defaultEntitlement = 5;
-      else if (lt.code === 'TRAINING') defaultEntitlement = 10;
-      else if (lt.code === 'ORDINATION') defaultEntitlement = 30;
+      else if (lt.code === 'ORDINATION') defaultEntitlement = 120;
       else if (lt.code === 'MATERNITY') defaultEntitlement = 90;
+      else if (lt.code === 'UNPAID') defaultEntitlement = 30;
 
       b = {
         id: uuidv4(),
@@ -647,6 +653,13 @@ router.get('/balances/:doctorId', (req, res) => {
       hasNew = true;
     }
 
+    const requestCountThisYear = (db.leave_requests || []).filter(r =>
+      r.doctor_id === doctorId &&
+      r.leave_type_id === lt.id &&
+      (r.status === 'PENDING' || r.status === 'APPROVED') &&
+      new Date(r.start_date).getFullYear() === currentYear
+    ).length;
+
     const total = Number(b.entitlement_days) + Number(b.carried_over_days);
     const remaining = total - Number(b.used_days) - Number(b.pending_days);
     return {
@@ -654,7 +667,9 @@ router.get('/balances/:doctorId', (req, res) => {
       leave_type_code: lt.code,
       leave_type_name: lt.name_th,
       total_quota: total,
-      remaining_days: Math.max(0, remaining)
+      remaining_days: Math.max(0, remaining),
+      request_count_this_year: requestCountThisYear,
+      max_requests_per_year: lt.max_requests_per_year || null
     };
   });
 
@@ -914,7 +929,9 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
       upload_later = 'false',
       submitted_by_admin = 'false',
       substitute_doctor_id = null,
-      duty_handover_notes = ''
+      duty_handover_notes = '',
+      reimbursement_requested,
+      swap_date = null
     } = body;
 
     if (!doctor_id || !leave_type_id || !start_date || !end_date) {
@@ -983,25 +1000,168 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     const today = getTodayString();
     const isEmergency = start_date === today;
 
-    // Notice days check
-    if (leaveType.min_notice_days > 0 && !isEmergency) {
-      const noticeDays = calculateDays(today, start_date) - 1;
-      if (noticeDays < leaveType.min_notice_days) {
-        return res.status(400).json({ error: `การลาประเภทนี้ต้องแจ้งล่วงหน้าอย่างน้อย ${leaveType.min_notice_days} วัน` });
+    // 1. Backdate Check (บันทึกก่อนลาเท่านั้น สำหรับประเภทที่ไม่อนุญาตให้บันทึกลาย้อนหลัง)
+    if (!leaveType.allows_backdate && start_date < today && submitted_by_admin !== 'true') {
+      return res.status(400).json({
+        error: `การ${leaveType.name_th}ต้องบันทึกก่อนลาเท่านั้น (ไม่อนุญาตให้บันทึกลาย้อนหลัง)`
+      });
+    }
+
+    // 2. Advance Notice Days Check (ส่งวันลาล่วงหน้าอย่างน้อย X วัน ตามปฏิทิน)
+    const [tY, tM, tD] = today.split('-').map(Number);
+    const [sY, sM, sD] = start_date.split('-').map(Number);
+    const diffCalendarDays = Math.round((new Date(sY, sM - 1, sD) - new Date(tY, tM - 1, tD)) / 86400000);
+    if (leaveType.min_notice_days > 0 && submitted_by_admin !== 'true') {
+      if (diffCalendarDays < leaveType.min_notice_days) {
+        return res.status(400).json({
+          error: `การ${leaveType.name_th}ต้องบันทึกและส่งวันลาล่วงหน้าอย่างน้อย ${leaveType.min_notice_days} วันก่อนวันเริ่มลา`
+        });
       }
     }
 
-    // Balance check
+    // 3. Max Consecutive Days Check (ทั้งในคำขอเดียว และต่อเนื่องกันทั้งในเดือน/คร่อมเดือน)
+    if (leaveType.max_days_per_request && submitted_by_admin !== 'true') {
+      const maxDays = Number(leaveType.max_days_per_request);
+      if (durationDays > maxDays) {
+        return res.status(400).json({
+          error: `การ${leaveType.name_th} กำหนดให้ลาต่อเนื่องได้ไม่เกิน ${maxDays} วัน (คำขอนี้รวม ${durationDays} วัน)`
+        });
+      }
+
+      // Check contiguous requests (both within month and across months)
+      const sameTypeActiveReqs = db.leave_requests.filter(r =>
+        r.doctor_id === doctor_id &&
+        r.leave_type_id === leave_type_id &&
+        (r.status === 'PENDING' || r.status === 'APPROVED') &&
+        r.half_day_type === 'FULL_DAY'
+      );
+      if (half_day_type === 'FULL_DAY' && sameTypeActiveReqs.length > 0) {
+        const intervals = [
+          ...sameTypeActiveReqs.map(r => ({ start: r.start_date, end: r.end_date })),
+          { start: start_date, end: end_date }
+        ].sort((a, b) => a.start.localeCompare(b.start));
+
+        const merged = [];
+        for (const item of intervals) {
+          if (merged.length === 0) {
+            merged.push({ ...item });
+          } else {
+            const prev = merged[merged.length - 1];
+            const prevEndPlus1 = new Date(new Date(prev.end).getTime() + 86400000).toISOString().split('T')[0];
+            if (item.start <= prevEndPlus1) {
+              if (item.end > prev.end) prev.end = item.end;
+            } else {
+              merged.push({ ...item });
+            }
+          }
+        }
+
+        const targetMerged = merged.find(m => m.start <= start_date && m.end >= end_date);
+        if (targetMerged) {
+          const mergedDays = calculateDays(targetMerged.start, targetMerged.end, 'CALENDAR_DAYS');
+          if (mergedDays > maxDays) {
+            return res.status(400).json({
+              error: `การ${leaveType.name_th} ลาต่อเนื่องได้ไม่เกิน ${maxDays} วัน ทั้งในเดือนและคร่อมเดือน (เมื่อรวมกับวันลาที่ต่อเนื่องกันจะเป็น ${mergedDays} วัน)`
+            });
+          }
+        }
+      }
+    }
+
+    // 4. Max Requests Per Year Check (เช่น ลาฝึกอบรม/ประชุมวิชาการ ใช้ได้ปีละ 1 ครั้ง)
     let reqYear = new Date(start_date).getFullYear();
+    const maxReqPerYear = leaveType.max_requests_per_year || (leaveType.code === 'TRAINING' ? 1 : null);
+    if (maxReqPerYear && submitted_by_admin !== 'true') {
+      const usedTimesThisYear = db.leave_requests.filter(r =>
+        r.doctor_id === doctor_id &&
+        r.leave_type_id === leave_type_id &&
+        (r.status === 'PENDING' || r.status === 'APPROVED') &&
+        new Date(r.start_date).getFullYear() === reqYear
+      ).length;
+      if (usedTimesThisYear >= maxReqPerYear) {
+        return res.status(400).json({
+          error: `สิทธิ์${leaveType.name_th} ใช้ได้ปีละ ${maxReqPerYear} ครั้งเท่านั้น (ท่านได้ใช้สิทธิ์หรือมีคำขอรออนุมัติในปี ${reqYear} ไปแล้ว)`
+        });
+      }
+    }
+
+    // 5. Minimum Tenure Check (ลาพักร้อน เริ่มใช้งานได้หลังทำงานครบ 6 เดือน เฉพาะ Full-time)
+    const minTenureMonths = leaveType.min_tenure_months || (leaveType.code === 'VACATION' ? 6 : 0);
+    if (minTenureMonths > 0 && doc.hire_date && submitted_by_admin !== 'true') {
+      const hireDate = new Date(doc.hire_date);
+      const leaveStart = new Date(start_date);
+      const tenureMonths = (leaveStart.getFullYear() - hireDate.getFullYear()) * 12
+        + (leaveStart.getMonth() - hireDate.getMonth())
+        + (leaveStart.getDate() >= hireDate.getDate() ? 0 : -1);
+      if (tenureMonths < minTenureMonths) {
+        return res.status(400).json({
+          error: `การ${leaveType.name_th} เริ่มใช้งานได้หลังทำงานครบ ${minTenureMonths} เดือน (เฉพาะแพทย์ Full-time)`
+        });
+      }
+    }
+
+    // 6. Minimum Remaining Working Days in Month Check (ลาพักร้อน ต้องมีวันทำงานเหลือไม่น้อยกว่า 15 วัน)
+    const minWorkDaysInMonth = leaveType.min_work_days_in_month || (leaveType.code === 'VACATION' ? 15 : 0);
+    if (minWorkDaysInMonth > 0 && submitted_by_admin !== 'true') {
+      const startObj = new Date(start_date);
+      const endObj = new Date(end_date);
+      const touchedMonths = new Set();
+      const cursor = new Date(startObj.getFullYear(), startObj.getMonth(), 1);
+      while (cursor <= endObj) {
+        touchedMonths.add(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`);
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+
+      const getLeaveDaysInMonth = (rStartStr, rEndStr, rHalfDay, yearNum, monthIndex) => {
+        const mStart = new Date(yearNum, monthIndex, 1);
+        const mEnd = new Date(yearNum, monthIndex + 1, 0);
+        const [rsY, rsM, rsD] = rStartStr.split('-').map(Number);
+        const [reY, reM, reD] = rEndStr.split('-').map(Number);
+        const rStart = new Date(rsY, rsM - 1, rsD);
+        const rEnd = new Date(reY, reM - 1, reD);
+        if (rEnd < mStart || rStart > mEnd) return 0;
+        if (rHalfDay === 'MORNING' || rHalfDay === 'AFTERNOON') return 0.5;
+        const overlapStart = rStart > mStart ? rStart : mStart;
+        const overlapEnd = rEnd < mEnd ? rEnd : mEnd;
+        return Math.round((overlapEnd - overlapStart) / 86400000) + 1;
+      };
+
+      const activeDoctorReqs = db.leave_requests.filter(r =>
+        r.doctor_id === doctor_id &&
+        (r.status === 'PENDING' || r.status === 'APPROVED')
+      );
+
+      for (const ym of touchedMonths) {
+        const [yNum, mNum] = ym.split('-').map(Number);
+        const mIdx = mNum - 1;
+        const daysInMonth = new Date(yNum, mIdx + 1, 0).getDate();
+        let leaveDaysInMonth = getLeaveDaysInMonth(start_date, end_date, half_day_type, yNum, mIdx);
+        for (const r of activeDoctorReqs) {
+          leaveDaysInMonth += getLeaveDaysInMonth(r.start_date, r.end_date, r.half_day_type, yNum, mIdx);
+        }
+        const remainingWorkDays = daysInMonth - leaveDaysInMonth;
+        if (remainingWorkDays < minWorkDaysInMonth) {
+          return res.status(400).json({
+            error: `ไม่สามารถยื่น${leaveType.name_th}ได้ เนื่องจากต้องมีวันทำงานเหลือไม่น้อยกว่า ${minWorkDaysInMonth} วันต่อเดือน (ในเดือน ${mNum}/${yNum} จะมีวันทำงานเหลือ ${remainingWorkDays} วัน)`
+          });
+        }
+      }
+    }
+
+    // 7. Balance check
     let balanceRecord = db.leave_balances.find(b => b.doctor_id === doctor_id && b.leave_type_id === leave_type_id && b.fiscal_year === reqYear);
+    const nonDayQuotaCodes = ['TRAINING', 'PERSONAL', 'SHIFT_SWAP', 'UNPAID'];
     if (balanceRecord) {
       const total = Number(balanceRecord.entitlement_days) + Number(balanceRecord.carried_over_days);
       const remaining = total - Number(balanceRecord.used_days) - Number(balanceRecord.pending_days);
-      if (remaining <= 0) {
-        return res.status(400).json({ error: `ไม่สามารถยื่นลาได้ เนื่องจากสิทธิ์${leaveType.name_th}คงเหลือ 0 วัน (โควตาเต็ม)` });
-      }
-      if (remaining < durationDays) {
-        return res.status(400).json({ error: `วันลาคงเหลือไม่พอ (คงเหลือ ${remaining} วัน แต่ต้องการลา ${durationDays} วัน)` });
+      const enforceDayQuota = !nonDayQuotaCodes.includes(leaveType.code) || total > 0;
+      if (enforceDayQuota) {
+        if (remaining <= 0) {
+          return res.status(400).json({ error: `ไม่สามารถยื่นลาได้ เนื่องจากสิทธิ์${leaveType.name_th}คงเหลือ 0 วัน (โควตาเต็ม)` });
+        }
+        if (remaining < durationDays) {
+          return res.status(400).json({ error: `วันลาคงเหลือไม่พอ (คงเหลือ ${remaining} วัน แต่ต้องการลา ${durationDays} วัน)` });
+        }
       }
     }
 
@@ -1061,9 +1221,15 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     );
     const hasFiles = req.files && req.files.length > 0;
     if (isAttachmentMandatory && !hasFiles && !isUploadLater && submitted_by_admin !== 'true') {
-      return res.status(400).json({
-        error: `การลา${leaveType.name_th} (${durationDays} วัน) จำเป็นต้องมีเอกสารประกอบตามระเบียบ กรุณาแนบไฟล์ หรือเลือกสะดวกแนบเอกสารตามหลัง`
-      });
+      let docRequiredMsg = `การ${leaveType.name_th} (${durationDays} วัน) จำเป็นต้องแนบเอกสารประกอบตามระเบียบ กรุณาแนบไฟล์ หรือเลือกส่งเอกสารตามหลัง`;
+      if (leaveType.code === 'SICK') {
+        docRequiredMsg = `การลาป่วยตั้งแต่ 3 วันขึ้นไป (${durationDays} วัน) ต้องแนบใบรับรองแพทย์ หรือเลือกแนบเอกสารตามหลัง`;
+      } else if (leaveType.code === 'PERSONAL') {
+        docRequiredMsg = `การลากิจ (ครอบครัวเสียชีวิต) ต้องแนบใบมรณบัตร หรือเลือกส่งให้เจ้าหน้าที่หลังจบงาน`;
+      } else if (leaveType.code === 'UNPAID') {
+        docRequiredMsg = `การลาไม่รับค่าตอบแทน ต้องแนบจดหมายเรียนถึงผู้อำนวยการแจ้งถึงเหตุผล`;
+      }
+      return res.status(400).json({ error: docRequiredMsg });
     }
 
     const deadlineDays = Number(leaveType?.attachment_deadline_days) || 3;
@@ -1071,30 +1237,43 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
       ? new Date(Date.now() + deadlineDays * 24 * 60 * 60 * 1000).toISOString()
       : null;
 
+    // Check if applicant is a Department Head
+    const applicantRoles = (db.doctor_roles || [])
+      .filter(r => r.doctor_id === doctor_id)
+      .map(r => r.role);
+    const isDeptHead = applicantRoles.includes('DEPT_HEAD');
+    const totalSteps = isDeptHead ? 1 : 2;
+
+    const parsedReimbursement = reimbursement_requested === 'true' || reimbursement_requested === true
+      ? true
+      : (reimbursement_requested === 'false' || reimbursement_requested === false ? false : null);
+
     const newRequest = {
-      id: uuidv4(),
-      request_no: requestNo,
-      doctor_id,
-      leave_type_id,
-      start_date,
-      end_date,
-      duration_days: durationDays,
-      half_day_type,
-      reason: sanitizeInput(reason),
-      is_emergency: isEmergency,
-      is_exception: isException,
-      upload_later: isUploadLater,
-      attachment_due_date: attachmentDueDate,
-      substitute_doctor_id: substitute_doctor_id || null,
-      substitute_doctor_name: substituteDoctorName,
-      duty_handover_notes: duty_handover_notes ? sanitizeInput(duty_handover_notes) : null,
-      has_shift_conflict: hasShiftConflict,
-      status: 'PENDING',
-      current_step: 1,
-      total_steps: 1,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
+        id: uuidv4(),
+        request_no: requestNo,
+        doctor_id,
+        leave_type_id,
+        start_date,
+        end_date,
+        duration_days: durationDays,
+        half_day_type,
+        reason: sanitizeInput(reason),
+        is_emergency: isEmergency,
+        is_exception: isException,
+        upload_later: isUploadLater,
+        attachment_due_date: attachmentDueDate,
+        substitute_doctor_id: substitute_doctor_id || null,
+        substitute_doctor_name: substituteDoctorName,
+        duty_handover_notes: duty_handover_notes ? sanitizeInput(duty_handover_notes) : null,
+        reimbursement_requested: parsedReimbursement,
+        swap_date: swap_date ? sanitizeInput(swap_date) : null,
+        has_shift_conflict: hasShiftConflict,
+        status: 'PENDING',
+        current_step: 1,
+        total_steps: totalSteps,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
 
     // Automatically cover conflicting shifts if substitute doctor provided
     if (hasShiftConflict && substitute_doctor_id) {
@@ -1150,7 +1329,7 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
       record_id: newRequest.id,
       action: 'INSERT',
       actor_id: doctor_id,
-      new_data: { request_no: requestNo, status: 'PENDING', is_emergency: isEmergency, is_exception: isException },
+      new_data: { request_no: requestNo, status: 'PENDING', is_emergency: isEmergency, is_exception: isException, total_steps: totalSteps },
       ip_address: req.ip || '127.0.0.1',
       created_at: new Date().toISOString()
     });
@@ -1158,15 +1337,11 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     saveStore();
 
     // -------------------------------------------------------------
-    // POST /api/requests/:id/attachments - Late attachment upload
-    // -------------------------------------------------------------
-
-    // -------------------------------------------------------------
     // LINE NOTIFICATIONS (1-on-1 Flex Messages)
     // -------------------------------------------------------------
     const appUrl = process.env.APP_URL || 'http://localhost:5173';
 
-    // 1. Send confirmation to Doctor (fallback to TEST_LINE_USER_ID in testing/demo)
+    // 1. Send confirmation to Doctor
     const doctorTargetLineId = doc.line_user_id || process.env.TEST_LINE_USER_ID;
     if (doctorTargetLineId) {
       const docFlex = buildDoctorSubmittedFlex(newRequest, doc, leaveType);
@@ -1176,27 +1351,36 @@ router.post('/leave-requests', handleUpload, async (req, res) => {
     let lineQuotaError = false;
 
     // 2. Find Approver and send 1-on-1 Flex Message
+    // If regular doctor: Step 1 = Department Head
+    // If Dept Head: Step 1 = นพ.ปริวรรธน์ ระเด่น
     const route = db.approval_routes.find(r => r.doctor_id === doctor_id && r.step_order === 1);
-    const defaultApproverId = 'c0000000-0000-0000-0000-000000000002'; // Dr. Paravee default
+    const defaultApproverId = isDeptHead 
+      ? 'c0000000-0000-0000-0000-000000000099' // Dr. Pariwat
+      : 'c0000000-0000-0000-0000-000000000011'; // Head of Dept (Dr. Thanwa for Med)
     const approverId = route ? route.approver_id : defaultApproverId; 
     const approver = db.doctors.find(d => d.id === approverId);
     const approverTargetLineId = approver?.line_user_id || process.env.TEST_LINE_USER_ID;
 
     if (approverTargetLineId) {
-      const approverFlex = buildApproverRequestFlex(newRequest, doc, leaveType, quotaInfo, appUrl);
+      const stepToSend = isDeptHead ? 2 : 1;
+      const prevName = isDeptHead ? 'ยื่นตรง (หัวหน้าแผนก)' : '';
+      const approverFlex = buildApproverRequestFlex(newRequest, doc, leaveType, quotaInfo, appUrl, stepToSend, prevName);
       const resPush = await sendLinePushMessage(approverTargetLineId, approverFlex);
       if (resPush.isQuotaError) {
         lineQuotaError = true;
       }
     }
 
-    // 3. If Emergency: Send immediate Urgent alert to P'Koong (Medical Admin)
-    if (isEmergency) {
-      const koong = db.doctors.find(d => d.employee_id === 'EMP-KOONG');
-      const koongTargetLineId = koong?.line_user_id || process.env.TEST_LINE_USER_ID;
-      if (koongTargetLineId) {
+    // 3. Notify P'Koong (Medical Admin) - "พี่ต้องทราบด้วย"
+    const koong = db.doctors.find(d => d.employee_id === 'EMP-KOONG');
+    const koongTargetLineId = koong?.line_user_id || process.env.TEST_LINE_USER_ID;
+    if (koongTargetLineId) {
+      if (isEmergency) {
         const emergFlex = buildEmergencyAlertFlex(newRequest, doc, leaveType, koong?.phone || '076-361888');
         await sendLinePushMessage(koongTargetLineId, emergFlex);
+      } else {
+        const adminNotifyFlex = buildMedicalAdminNotificationFlex(newRequest, doc, leaveType, 'SUBMITTED', doc.department_name);
+        await sendLinePushMessage(koongTargetLineId, adminNotifyFlex);
       }
     }
 
@@ -1367,84 +1551,221 @@ router.post('/leave-requests/:id/attachments', handleUpload, async (req, res) =>
 });
 
 // -------------------------------------------------------------
-// APPROVAL ACTIONS
+// APPROVAL ACTIONS & MULTI-STEP FLOW ENGINE
 // -------------------------------------------------------------
+
+/**
+ * Universal Approval Processor for both Web/LIFF and LINE 1-Click
+ * Flow: Doctor >> Step 1: Head of Department >> Step 2: Dr. Pariwat (Asst Director)
+ * P'Koong (Medical Admin) is notified at every milestone ("พี่ต้องทราบด้วย")
+ * Requesting doctor is notified of progress and final decision
+ */
+export async function processLeaveApproval(reqItem, approverLineUserId = null, replyToken = null, sourceComment = 'อนุมัติผ่านระบบ', specificApproverId = null) {
+  const db = getDb();
+  const doc = db.doctors.find(d => d.id === reqItem.doctor_id);
+  const lt = db.leave_types.find(t => t.id === reqItem.leave_type_id);
+  const currentStep = reqItem.current_step || 1;
+  const totalSteps = reqItem.total_steps || 2;
+
+  // Already fully approved
+  if (reqItem.status === 'APPROVED') {
+    const receiptFlex = buildApproverReceiptFlex(reqItem, doc || {}, lt || {}, true);
+    if (replyToken) {
+      await sendLineReplyMessage(replyToken, receiptFlex);
+    } else if (approverLineUserId) {
+      await sendLinePushMessage(approverLineUserId, receiptFlex);
+    }
+    return { success: true, message: 'ใบลาได้รับการอนุมัติเรียบร้อยแล้ว', request: reqItem, alreadyApproved: true };
+  }
+
+  if (reqItem.status !== 'PENDING') {
+    const errText = `⚠️ ใบลาเลขที่ ${reqItem.request_no} อยู่ในสถานะ "${reqItem.status}" จึงไม่สามารถอนุมัติได้`;
+    if (replyToken) {
+      await sendLineReplyMessage(replyToken, { type: 'text', text: errText });
+    } else if (approverLineUserId) {
+      await sendLinePushMessage(approverLineUserId, { type: 'text', text: errText });
+    }
+    return { success: false, error: errText };
+  }
+
+  // Identify Approver Profile
+  let approver = null;
+  if (specificApproverId) {
+    approver = db.doctors.find(d => d.id === specificApproverId);
+  } else if (approverLineUserId) {
+    approver = db.doctors.find(d => d.line_user_id === approverLineUserId);
+  }
+
+  if (!approver) {
+    if (currentStep === 1) {
+      const route = db.approval_routes.find(r => r.doctor_id === reqItem.doctor_id && r.step_order === 1);
+      approver = route ? db.doctors.find(d => d.id === route.approver_id) : db.doctors.find(d => d.id === 'c0000000-0000-0000-0000-000000000011');
+    } else {
+      approver = db.doctors.find(d => d.id === 'c0000000-0000-0000-0000-000000000099'); // Dr. Pariwat
+    }
+  }
+
+  const approverName = approver ? `${approver.prefix_th}${approver.first_name_th} ${approver.last_name_th}` : 'ผู้อนุมัติ';
+  const approverId = approver ? approver.id : 'c0000000-0000-0000-0000-000000000099';
+
+  // --- CASE A: STEP 1 APPROVAL (หัวหน้าแพทย์อนุมัติ ส่งต่อ นพ.ปริวรรธน์ ระเด่น) ---
+  if (currentStep === 1 && totalSteps === 2) {
+    reqItem.current_step = 2;
+    reqItem.updated_at = new Date().toISOString();
+
+    // 1. Record Step 1 Approval Log
+    db.approval_logs.push({
+      id: uuidv4(),
+      request_id: reqItem.id,
+      step_order: 1,
+      approver_id: approverId,
+      action: 'APPROVED',
+      comments: sourceComment || 'อนุมัติขั้นที่ 1 เรียบร้อย (ส่งต่อ นพ.ปริวรรธน์ ระเด่น)',
+      acted_at: new Date().toISOString()
+    });
+
+    db.audit_logs.push({
+      id: uuidv4(),
+      table_name: 'leave_requests',
+      record_id: reqItem.id,
+      action: 'UPDATE',
+      actor_id: approverId,
+      new_data: { current_step: 2, step_1_approver: approverName, comments: sourceComment },
+      ip_address: '127.0.0.1',
+      created_at: new Date().toISOString()
+    });
+
+    saveStore();
+
+    // 2. Reply receipt back to Step 1 approver
+    if (replyToken) {
+      await sendLineReplyMessage(replyToken, {
+        type: 'text',
+        text: `✅ บันทึกการอนุมัติขั้นที่ 1 เรียบร้อยแล้ว (${approverName})\nระบบได้ส่งต่อคำขอไปยัง นพ.ปริวรรธน์ ระเด่น (ผู้ช่วย ผอ.รพ.) เพื่อพิจารณาอนุมัติขั้นสุดท้ายแล้ว`
+      });
+    }
+
+    // 3. Push 1-Click Approve Flex to Step 2 Approver (นพ.ปริวรรธน์ ระเด่น)
+    const step2Approver = db.doctors.find(d => d.id === 'c0000000-0000-0000-0000-000000000099');
+    const step2LineId = step2Approver?.line_user_id || process.env.TEST_LINE_USER_ID;
+    if (step2LineId) {
+      const appUrl = process.env.APP_URL || 'http://localhost:5173';
+      const step2Flex = buildApproverRequestFlex(reqItem, doc || {}, lt || {}, null, appUrl, 2, approverName);
+      await sendLinePushMessage(step2LineId, step2Flex);
+    }
+
+    // 4. Notify Doctor: Step 1 passed! Waiting for Step 2
+    const docTargetLineId = doc?.line_user_id || process.env.TEST_LINE_USER_ID;
+    if (docTargetLineId) {
+      const step1DocFlex = buildDoctorStep1ApprovedFlex(reqItem, doc || {}, lt || {}, approverName);
+      await sendLinePushMessage(docTargetLineId, step1DocFlex);
+    }
+
+    // 5. Notify P'Koong (Medical Admin) - "พี่ต้องทราบด้วย"
+    const koong = db.doctors.find(d => d.employee_id === 'EMP-KOONG');
+    const koongTargetLineId = koong?.line_user_id || process.env.TEST_LINE_USER_ID;
+    if (koongTargetLineId) {
+      const koongFlex = buildMedicalAdminNotificationFlex(reqItem, doc || {}, lt || {}, 'STEP1_APPROVED', approverName, sourceComment);
+      await sendLinePushMessage(koongTargetLineId, koongFlex);
+    }
+
+    return {
+      success: true,
+      message: `อนุมัติขั้นที่ 1 สำเร็จ (${approverName}) ส่งต่อไปยัง นพ.ปริวรรธน์ ระเด่น เรียบร้อยแล้ว`,
+      request: reqItem,
+      next_step: 2
+    };
+  }
+
+  // --- CASE B: STEP 2 / FINAL APPROVAL (นพ.ปริวรรธน์ ระเด่น อนุมัติสมบูรณ์) ---
+  reqItem.status = 'APPROVED';
+  reqItem.updated_at = new Date().toISOString();
+
+  // Deduct leave balance: pending -> used
+  const reqYear = new Date(reqItem.start_date).getFullYear();
+  const balance = db.leave_balances.find(b => b.doctor_id === reqItem.doctor_id && b.leave_type_id === reqItem.leave_type_id && b.fiscal_year === reqYear);
+  if (balance) {
+    balance.pending_days = Math.max(0, Number(balance.pending_days) - Number(reqItem.duration_days));
+    balance.used_days = Number(balance.used_days) + Number(reqItem.duration_days);
+    balance.updated_at = new Date().toISOString();
+  }
+
+  // Record Step 2 Approval Log
+  db.approval_logs.push({
+    id: uuidv4(),
+    request_id: reqItem.id,
+    step_order: totalSteps,
+    approver_id: approverId,
+    action: 'APPROVED',
+    comments: sourceComment || 'อนุมัติขั้นสุดท้ายเรียบร้อย',
+    acted_at: new Date().toISOString()
+  });
+
+  db.audit_logs.push({
+    id: uuidv4(),
+    table_name: 'leave_requests',
+    record_id: reqItem.id,
+    action: 'UPDATE',
+    actor_id: approverId,
+    new_data: { status: 'APPROVED', approver_id: approverId, comments: sourceComment },
+    ip_address: '127.0.0.1',
+    created_at: new Date().toISOString()
+  });
+
+  saveStore();
+
+  // 1. Reply Confirmation Receipt back to Approver via Reply Message
+  if (replyToken) {
+    const receiptFlex = buildApproverReceiptFlex(reqItem, doc || {}, lt || {}, false);
+    await sendLineReplyMessage(replyToken, receiptFlex);
+  }
+
+  // 2. Push final notification to Doctor: Approved!
+  const webhookDocTargetId = doc?.line_user_id || process.env.TEST_LINE_USER_ID;
+  if (webhookDocTargetId) {
+    const finalApproverTitle = 'นพ.ปริวรรธน์ ระเด่น (ผู้ช่วยผู้อำนวยการ รพ.)';
+    const flex = buildLeaveDecisionFlex(reqItem, doc || {}, lt || {}, 'APPROVED', finalApproverTitle, sourceComment);
+    await sendLinePushMessage(webhookDocTargetId, flex);
+  }
+
+  // 3. Push notification to P'Koong (Medical Admin): Complete!
+  const koong = db.doctors.find(d => d.employee_id === 'EMP-KOONG');
+  const koongTargetLineId = koong?.line_user_id || process.env.TEST_LINE_USER_ID;
+  if (koongTargetLineId) {
+    const koongFlex = buildMedicalAdminNotificationFlex(reqItem, doc || {}, lt || {}, 'FINAL_APPROVED', approverName, sourceComment);
+    await sendLinePushMessage(koongTargetLineId, koongFlex);
+  }
+
+  return {
+    success: true,
+    message: 'อนุมัติใบลาขั้นสุดท้ายสำเร็จ โดย นพ.ปริวรรธน์ ระเด่น (ผู้ช่วยผู้อำนวยการ รพ.)',
+    request: reqItem
+  };
+}
+
+// POST /api/leave-requests/:id/approve
 router.post('/leave-requests/:id/approve', async (req, res) => {
   try {
     const db = getDb();
     const reqItem = db.leave_requests.find(r => r.id === req.params.id);
     if (!reqItem) return res.status(404).json({ error: 'Leave request not found' });
 
-    if (reqItem.status === 'APPROVED') {
-      return res.status(400).json({ error: 'ใบลาได้รับการอนุมัติแล้ว' });
-    }
-
     const { approver_id, comments = '' } = req.body;
     const cleanComments = sanitizeInput(comments);
-    const actorId = approver_id || 'c0000000-0000-0000-0000-000000000002'; // default Dr. Paravee
-    const approver = db.doctors.find(d => d.id === actorId);
+    const actorId = approver_id || (reqItem.current_step === 2 ? 'c0000000-0000-0000-0000-000000000099' : 'c0000000-0000-0000-0000-000000000011');
 
-    // Update Request status
-    reqItem.status = 'APPROVED';
-    reqItem.updated_at = new Date().toISOString();
-
-    // Sync Balance: pending -> used
-    const reqYear = new Date(reqItem.start_date).getFullYear();
-    const balance = db.leave_balances.find(b => b.doctor_id === reqItem.doctor_id && b.leave_type_id === reqItem.leave_type_id && b.fiscal_year === reqYear);
-    if (balance) {
-      balance.pending_days = Math.max(0, Number(balance.pending_days) - Number(reqItem.duration_days));
-      balance.used_days = Number(balance.used_days) + Number(reqItem.duration_days);
-      balance.updated_at = new Date().toISOString();
+    const result = await processLeaveApproval(reqItem, null, null, cleanComments, actorId);
+    if (!result.success) {
+      return res.status(400).json(result);
     }
-
-    // Add Approval Log
-    db.approval_logs.push({
-      id: uuidv4(),
-      request_id: reqItem.id,
-      step_order: reqItem.current_step,
-      approver_id: actorId,
-      action: 'APPROVED',
-      comments: cleanComments,
-      acted_at: new Date().toISOString()
-    });
-
-    // Add Audit Log
-    db.audit_logs.push({
-      id: uuidv4(),
-      table_name: 'leave_requests',
-      record_id: reqItem.id,
-      action: 'UPDATE',
-      actor_id: actorId,
-      new_data: { status: 'APPROVED', approver_id: actorId, comments: cleanComments },
-      ip_address: req.ip || '127.0.0.1',
-      created_at: new Date().toISOString()
-    });
-
-    saveStore();
-
-    // Send 1-on-1 Flex Message to Doctor
-    const doc = db.doctors.find(d => d.id === reqItem.doctor_id);
-    const leaveType = db.leave_types.find(lt => lt.id === reqItem.leave_type_id);
-    const approveTargetLineId = doc?.line_user_id || process.env.TEST_LINE_USER_ID;
-    if (approveTargetLineId) {
-      const decisionFlex = buildLeaveDecisionFlex(
-        reqItem,
-        doc,
-        leaveType,
-        'APPROVED',
-        approver ? `${approver.prefix_th}${approver.first_name_th} ${approver.last_name_th}` : 'หัวหน้าแผนก',
-        cleanComments
-      );
-      await sendLinePushMessage(approveTargetLineId, decisionFlex);
-    }
-
-    res.json({ message: 'อนุมัติใบลาสำเร็จ', request: reqItem });
+    res.json(result);
   } catch (err) {
     console.error('Approval error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
+// POST /api/leave-requests/:id/reject
 router.post('/leave-requests/:id/reject', async (req, res) => {
   try {
     const db = getDb();
@@ -1453,7 +1774,7 @@ router.post('/leave-requests/:id/reject', async (req, res) => {
 
     const { approver_id, comments = 'ติดภารกิจออกตรวจ / ไม่ตรงเงื่อนไข' } = req.body;
     const cleanComments = sanitizeInput(comments);
-    const actorId = approver_id || 'c0000000-0000-0000-0000-000000000002';
+    const actorId = approver_id || (reqItem.current_step === 2 ? 'c0000000-0000-0000-0000-000000000099' : 'c0000000-0000-0000-0000-000000000011');
     const approver = db.doctors.find(d => d.id === actorId);
 
     // Update status
@@ -1472,7 +1793,7 @@ router.post('/leave-requests/:id/reject', async (req, res) => {
     db.approval_logs.push({
       id: uuidv4(),
       request_id: reqItem.id,
-      step_order: reqItem.current_step,
+      step_order: reqItem.current_step || 1,
       approver_id: actorId,
       action: 'REJECTED',
       comments: cleanComments,
@@ -1497,19 +1818,29 @@ router.post('/leave-requests/:id/reject', async (req, res) => {
     const doc = db.doctors.find(d => d.id === reqItem.doctor_id);
     const leaveType = db.leave_types.find(lt => lt.id === reqItem.leave_type_id);
     const rejectTargetLineId = doc?.line_user_id || process.env.TEST_LINE_USER_ID;
+    const approverName = approver ? `${approver.prefix_th}${approver.first_name_th} ${approver.last_name_th}` : 'ผู้อนุมัติ';
+    
     if (rejectTargetLineId) {
       const decisionFlex = buildLeaveDecisionFlex(
         reqItem,
         doc,
         leaveType,
         'REJECTED',
-        approver ? `${approver.prefix_th}${approver.first_name_th} ${approver.last_name_th}` : 'หัวหน้าแผนก',
+        approverName,
         cleanComments
       );
       await sendLinePushMessage(rejectTargetLineId, decisionFlex);
     }
 
-    res.json({ message: 'บันทึกไม่อนุมัติสำเร็จ', request: reqItem });
+    // Notify P'Koong (Medical Admin) - "พี่ต้องทราบด้วย"
+    const koong = db.doctors.find(d => d.employee_id === 'EMP-KOONG');
+    const koongTargetLineId = koong?.line_user_id || process.env.TEST_LINE_USER_ID;
+    if (koongTargetLineId) {
+      const koongFlex = buildMedicalAdminNotificationFlex(reqItem, doc || {}, leaveType || {}, 'REJECTED', approverName, cleanComments);
+      await sendLinePushMessage(koongTargetLineId, koongFlex);
+    }
+
+    res.json({ message: 'บันทึกไม่อนุมัติสำเร็จ ระบบส่งแจ้งเตือนแพทย์เรียบร้อยแล้ว', request: reqItem });
   } catch (err) {
     console.error('Reject error:', err);
     res.status(500).json({ error: err.message });
@@ -1701,75 +2032,7 @@ router.post('/line/webhook', async (req, res) => {
       }
     };
 
-    // Helper function to process leave approval and send notifications to both Approver and Doctor
-    const processLeaveApproval = async (reqItem, approverLineUserId, replyToken, sourceComment = 'อนุมัติผ่าน LINE 1-Click') => {
-      const doc = db.doctors.find(d => d.id === reqItem.doctor_id);
-      const lt = db.leave_types.find(t => t.id === reqItem.leave_type_id);
-
-      if (reqItem.status === 'APPROVED') {
-        const receiptFlex = buildApproverReceiptFlex(reqItem, doc || {}, lt || {}, true);
-        await replyOrPush(replyToken, approverLineUserId, receiptFlex);
-        return;
-      }
-
-      if (reqItem.status !== 'PENDING') {
-        await replyOrPush(replyToken, approverLineUserId, {
-          type: 'text',
-          text: `⚠️ ใบลาเลขที่ ${reqItem.request_no} อยู่ในสถานะ "${reqItem.status}" จึงไม่สามารถอนุมัติซ้ำได้`
-        });
-        return;
-      }
-
-      // 1. Update Request Status
-      reqItem.status = 'APPROVED';
-      reqItem.updated_at = new Date().toISOString();
-
-      // 2. Deduct leave balance
-      const reqYear = new Date(reqItem.start_date).getFullYear();
-      const balance = db.leave_balances.find(b => b.doctor_id === reqItem.doctor_id && b.leave_type_id === reqItem.leave_type_id && b.fiscal_year === reqYear);
-      if (balance) {
-        balance.pending_days = Math.max(0, Number(balance.pending_days) - Number(reqItem.duration_days));
-        balance.used_days = Number(balance.used_days) + Number(reqItem.duration_days);
-        balance.updated_at = new Date().toISOString();
-      }
-
-      // 3. Find Approver Profile
-      let approver = null;
-      if (approverLineUserId) {
-        approver = db.doctors.find(d => d.line_user_id === approverLineUserId);
-      }
-      if (!approver) {
-        approver = db.doctors.find(d => d.id === 'c0000000-0000-0000-0000-000000000002');
-      }
-      const approverName = approver ? `${approver.prefix_th}${approver.first_name_th} ${approver.last_name_th}` : 'นพ.ปารวี ชาญวิทย์';
-      const approverId = approver ? approver.id : 'c0000000-0000-0000-0000-000000000002';
-
-      // 4. Record Audit/Approval Log
-      db.approval_logs.push({
-        id: uuidv4(),
-        request_id: reqItem.id,
-        step_order: 1,
-        approver_id: approverId,
-        action: 'APPROVED',
-        comments: sourceComment,
-        acted_at: new Date().toISOString()
-      });
-
-      saveStore();
-
-      // 5. Send Confirmation Receipt back to Approver via Reply Message
-      if (replyToken) {
-        const receiptFlex = buildApproverReceiptFlex(reqItem, doc || {}, lt || {}, false);
-        await sendLineReplyMessage(replyToken, receiptFlex);
-      }
-
-      // 6. Push notification to the Doctor who submitted the leave
-      const webhookDocTargetId = doc?.line_user_id || process.env.TEST_LINE_USER_ID;
-      if (webhookDocTargetId) {
-        const flex = buildLeaveDecisionFlex(reqItem, doc, lt, 'APPROVED', approverName, sourceComment);
-        await sendLinePushMessage(webhookDocTargetId, flex);
-      }
-    };
+    // Webhook event loop uses the outer 2-step processLeaveApproval engine
 
     for (const event of events) {
       // 1. Follow Event (Doctor adds bot as friend or unblocks)
@@ -2224,15 +2487,16 @@ function calculateTenure(hireDateStr, asOfDate = new Date()) {
 
 function calculateVacationEntitlement(doctor, tenure, rules, targetYear, settings) {
   if (doctor.doctor_type === 'PART_TIME' && !settings?.allow_part_time) {
-    return { entitlement: 0, rule_applied: 'แพทย์พาร์ทไทม์ (ไม่มีสิทธิ์ลาพักผ่อน)' };
+    return { entitlement: 0, rule_applied: 'แพทย์พาร์ทไทม์ (ไม่มีสิทธิ์ลาพักร้อน)' };
   }
 
+  const exactYears = tenure.years + (tenure.months / 12);
   const sortedRules = [...rules].sort((a, b) => a.min_years - b.min_years);
-  const matchedRule = sortedRules.find(r => tenure.years >= r.min_years && tenure.years < r.max_years)
+  const matchedRule = sortedRules.find(r => exactYears >= r.min_years && exactYears < r.max_years)
     || sortedRules[sortedRules.length - 1];
 
   if (!matchedRule) {
-    return { entitlement: 6.0, rule_applied: 'เกณฑ์เริ่มต้นมาตรฐาน 6 วัน' };
+    return { entitlement: 20.0, rule_applied: 'เกณฑ์มาตรฐาน 20 วัน/ปี (หลังทำงานครบ 6 เดือน)' };
   }
 
   // First year prorated calculation

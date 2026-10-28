@@ -170,10 +170,10 @@ export default function AdminTenurePage() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-slate-900">
-                คำนวณสิทธิ์วันลาตามอายุงาน (Tenure & Prorate Engine)
+                เกณฑ์ลาพักร้อนแพทย์ 20 วัน/ปี &amp; คำนวณสิทธิ์ตามอายุงาน
               </h1>
               <p className="text-xs text-slate-500">
-                ประมวลผลโควตาวันลาพักผ่อนประจำปี (Vacation) ตามอายุงานของแพทย์และคำนวณวันยกยอด (Carry-over)
+                แพทย์ไม่มีวันหยุดนักขัตฤกษ์แยกต่างหาก โดยรวมสิทธิ์ไว้ในลาพักร้อน 20 วัน/ปี (เริ่มใช้ได้หลังทำงานครบ 6 เดือน เฉพาะ Full-time)
               </p>
             </div>
           </div>
@@ -196,6 +196,43 @@ export default function AdminTenurePage() {
             <Sparkles className="w-3.5 h-3.5" />
             <span>ประมวลผลและปรับสิทธิ์ทั้ง รพ. ({selectedYear})</span>
           </button>
+        </div>
+      </div>
+
+      {/* Policy Banner: ลาพักร้อน 20 วัน/ปี (รวมวันหยุดนักขัตฤกษ์) */}
+      <div className="bg-gradient-to-r from-sky-50 via-white to-emerald-50/40 p-4 rounded-2xl border border-sky-200 shadow-2xs">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-[#006699]/10 text-[#006699] flex items-center justify-center shrink-0 mt-0.5">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div className="space-y-1.5 text-xs flex-1">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <span className="font-bold text-slate-900 text-sm">
+                ระเบียบการลาพักร้อนของแพทย์ (รวมวันหยุดนักขัตฤกษ์ในโควตา 20 วัน/ปี)
+              </span>
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#006699] text-white">
+                คำนวณวันลาตามปฏิทิน (Calendar Days)
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 text-slate-600 pt-1">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span><strong>โควตา 20 วัน/ปี:</strong> เริ่มใช้งานได้หลังทำงานครบ 6 เดือน (เฉพาะแพทย์ Full-time)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span><strong>ลาต่อเนื่องสูงสุด:</strong> ไม่เกิน 10 วัน ทั้งในเดือนและคร่อมเดือน (นับรวมวันหยุดประจำ)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span><strong>การส่งใบลา:</strong> บันทึกก่อนลาเท่านั้น ส่งวันลาล่วงหน้าอย่างน้อย 7 วัน</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span><strong>จำนวนวันทำงานขั้นต่ำ:</strong> ต้องมีวันทำงานเหลือในเดือนไม่น้อยกว่า 15 วัน</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

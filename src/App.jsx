@@ -117,11 +117,7 @@ function AppContent() {
                   <AdminAuditPage />
                 </ProtectedRoute>
               } />
-              <Route path="/admin/holidays" element={
-                <ProtectedRoute allowedRoles={['MEDICAL_ADMIN', 'ADMIN']}>
-                  <AdminHolidaysPage />
-                </ProtectedRoute>
-              } />
+              <Route path="/admin/holidays" element={<Navigate to="/admin/tenure" replace />} />
               <Route path="/admin/tenure" element={
                 <ProtectedRoute allowedRoles={['MEDICAL_ADMIN', 'ADMIN']}>
                   <AdminTenurePage />

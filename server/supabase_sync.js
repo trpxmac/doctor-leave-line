@@ -93,6 +93,19 @@ export async function loadStoreFromSupabase(fallbackDb) {
 
     if (departments && departments.length > 0) {
       console.log('✅ Successfully loaded data from Supabase Cloud');
+      // Merge local extra fields on leave_requests (like reimbursement_requested, swap_date, substitute_doctor_id)
+      const mergedRequests = (leave_requests || []).map(req => {
+        const localReq = fallbackDb?.leave_requests?.find(lr => lr.id === req.id);
+        if (localReq) {
+          return {
+            ...req,
+            reimbursement_requested: req.reimbursement_requested ?? localReq.reimbursement_requested,
+            swap_date: req.swap_date ?? localReq.swap_date,
+            substitute_doctor_id: req.substitute_doctor_id ?? localReq.substitute_doctor_id
+          };
+        }
+        return req;
+      });
       return {
         departments: departments || [],
         leave_types: leave_types || [],
@@ -100,7 +113,7 @@ export async function loadStoreFromSupabase(fallbackDb) {
         doctor_roles: doctor_roles || [],
         approval_routes: approval_routes || [],
         leave_balances: leave_balances || [],
-        leave_requests: leave_requests || [],
+        leave_requests: mergedRequests,
         leave_attachments: leave_attachments || [],
         approval_logs: approval_logs || [],
         audit_logs: audit_logs || [],
@@ -132,11 +145,18 @@ export async function syncStoreToSupabase(db) {
           const { hire_date, working_pattern, ...rest } = record;
           return rest;
         }
+        if (table === 'leave_types') {
+          const {
+            max_requests_per_year, has_reimbursement_option,
+            min_tenure_months, min_work_days_in_month, ...rest
+          } = record;
+          return rest;
+        }
         if (table === 'leave_requests') {
           const { 
             reminder_sent_24, reminder_sent_48, 
             attachment_reminder_sent_24, attachment_reminder_sent_due,
-            substitute_doctor_id, ...rest 
+            substitute_doctor_id, reimbursement_requested, swap_date, ...rest 
           } = record;
           return rest;
         }

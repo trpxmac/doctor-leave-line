@@ -11,7 +11,10 @@ import {
   Paperclip,
   FileText,
   RefreshCw,
-  MessageSquare
+  MessageSquare,
+  ChevronRight,
+  ShieldCheck,
+  UserCheck
 } from 'lucide-react';
 
 export default function ApproverPage() {
@@ -22,6 +25,7 @@ export default function ApproverPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('PENDING'); // 'PENDING' or 'HISTORY'
+  const [stepFilter, setStepFilter] = useState('ALL'); // 'ALL', 'STEP1', 'STEP2'
 
   const fetchRequests = async () => {
     setLoading(true);
@@ -45,15 +49,16 @@ export default function ApproverPage() {
     return () => window.removeEventListener('leave-status-updated', handleUpdate);
   }, []);
 
-  const handleApprove = async (reqId) => {
+  const handleApprove = async (reqItem) => {
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/leave-requests/${reqId}/approve`, {
+      const isStep1 = reqItem.current_step === 1 && reqItem.total_steps === 2;
+      const res = await fetch(`/api/leave-requests/${reqItem.id}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          approver_id: currentDoctor?.id || 'c0000000-0000-0000-0000-000000000002',
-          comments: 'อนุมัติเรียบร้อยตามระเบียบ'
+          approver_id: currentDoctor?.id || (isStep1 ? 'c0000000-0000-0000-0000-000000000011' : 'c0000000-0000-0000-0000-000000000099'),
+          comments: isStep1 ? 'หัวหน้าแพทย์อนุมัติขั้นที่ 1 ส่งต่อ นพ.ปริวรรธน์ ระเด่น' : 'นพ.ปริวรรธน์ ระเด่น อนุมัติขั้นสุดท้ายเรียบร้อย'
         })
       });
 
@@ -75,7 +80,7 @@ export default function ApproverPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          approver_id: currentDoctor?.id || 'c0000000-0000-0000-0000-000000000002',
+          approver_id: currentDoctor?.id || 'c0000000-0000-0000-0000-000000000099',
           comments: rejectReason || 'ติดภารกิจออกตรวจ / ไม่ตรงเงื่อนไข'
         })
       });
@@ -92,9 +97,25 @@ export default function ApproverPage() {
     }
   };
 
-  const pendingList = requests.filter(r => r.status === 'PENDING');
+  // Filter based on tabs and step
+  const pendingList = requests.filter(r => {
+    if (r.status !== 'PENDING') return false;
+    if (stepFilter === 'STEP1') return (r.current_step === 1 && r.total_steps === 2);
+    if (stepFilter === 'STEP2') return (r.current_step === 2 || r.total_steps === 1);
+    return true;
+  });
+
+  const allPendingCount = requests.filter(r => r.status === 'PENDING').length;
+  const step1PendingCount = requests.filter(r => r.status === 'PENDING' && r.current_step === 1 && r.total_steps === 2).length;
+  const step2PendingCount = requests.filter(r => r.status === 'PENDING' && (r.current_step === 2 || r.total_steps === 1)).length;
+
   const historyList = requests.filter(r => r.status !== 'PENDING');
   const displayedList = activeTab === 'PENDING' ? pendingList : historyList;
+
+  // Header Role Description
+  const isExecutive = currentDoctor?.roles?.includes('EXECUTIVE_APPROVER');
+  const isMedicalAdmin = currentDoctor?.roles?.includes('MEDICAL_ADMIN');
+  const isDeptHead = currentDoctor?.roles?.includes('DEPT_HEAD');
 
   return (
     <div className="min-h-screen bg-slate-50 py-6 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
@@ -103,15 +124,35 @@ export default function ApproverPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+            <div className={`w-8 h-8 rounded-lg ${isExecutive ? 'bg-purple-700' : 'bg-emerald-600'} text-white flex items-center justify-center shadow-xs`}>
               <CheckSquare className="w-5 h-5" />
             </div>
-            <h1 className="text-xl font-bold text-slate-900">
-              ศูนย์พิจารณาอนุมัติใบลาแพทย์ (Approver Portal)
-            </h1>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">
+                ศูนย์พิจารณาอนุมัติใบลาแพทย์ (Approver Portal)
+              </h1>
+            </div>
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            ผู้อนุมัติ: {currentDoctor?.prefix_th}{currentDoctor?.first_name_th} {currentDoctor?.last_name_th} • หัวหน้าแผนกอายุรกรรม
+          <p className="text-xs text-slate-600 mt-1 flex items-center gap-1.5 flex-wrap">
+            <span className="font-semibold text-slate-800">
+              ผู้อนุมัติ: {currentDoctor?.prefix_th}{currentDoctor?.first_name_th} {currentDoctor?.last_name_th}
+            </span>
+            <span className="text-slate-400">•</span>
+            {isExecutive ? (
+              <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-bold text-[11px]">
+                ผู้ช่วยผู้อำนวยการ รพ. (ผู้อนุมัติขั้นสุดท้าย ทุกแผนก)
+              </span>
+            ) : isDeptHead ? (
+              <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold text-[11px]">
+                หัวหน้าแผนก (ผู้อนุมัติขั้นที่ 1)
+              </span>
+            ) : isMedicalAdmin ? (
+              <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold text-[11px]">
+                ฝ่ายการแพทย์ (กำกับดูแล Flow อนุมัติ 2 ขั้นตอน)
+              </span>
+            ) : (
+              <span className="text-slate-500">{currentDoctor?.position || 'แพทย์'}</span>
+            )}
           </p>
         </div>
 
@@ -124,35 +165,100 @@ export default function ApproverPage() {
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 mb-6 border-b border-slate-200 pb-2">
-        <button
-          onClick={() => setActiveTab('PENDING')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-            activeTab === 'PENDING'
-              ? 'bg-[#006699] text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <span>รอการอนุมัติ</span>
-          {pendingList.length > 0 && (
-            <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
-              {pendingList.length}
-            </span>
-          )}
-        </button>
+      {/* 2-Step Flow Overview Banner */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6 shadow-2xs">
+        <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+          <ShieldCheck className="w-4 h-4 text-[#006699]" />
+          <span>โครงสร้าง Flow การอนุมัติใบลา 2 ขั้นตอน (Bangkok Hospital Siriroj):</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+          <div className="bg-sky-50 border border-sky-100 rounded-xl p-2.5 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-sky-600 text-white flex items-center justify-center font-bold text-[11px] shrink-0">1</span>
+            <div>
+              <div className="font-bold text-sky-900">แพทย์ผู้ขอลา ยื่นคำขอ</div>
+              <div className="text-[10px] text-sky-700">ส่งแจ้งเตือนเข้า LINE 1-on-1</div>
+            </div>
+          </div>
+          <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-2.5 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-[11px] shrink-0">2</span>
+            <div>
+              <div className="font-bold text-emerald-900">หัวหน้าแพทย์ประจำแผนก</div>
+              <div className="text-[10px] text-emerald-700">พิจารณาขั้นที่ 1 (10 แผนก)</div>
+            </div>
+          </div>
+          <div className="bg-purple-50 border border-purple-100 rounded-xl p-2.5 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-[11px] shrink-0">3</span>
+            <div>
+              <div className="font-bold text-purple-900">นพ.ปริวรรธน์ ระเด่น</div>
+              <div className="text-[10px] text-purple-700">ผช.ผอ.รพ. พิจารณาขั้นสุดท้าย</div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-        <button
-          onClick={() => setActiveTab('HISTORY')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-            activeTab === 'HISTORY'
-              ? 'bg-[#006699] text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <span>ประวัติที่ดำเนินการแล้ว</span>
-          <span className="text-[10px] text-slate-400">({historyList.length})</span>
-        </button>
+      {/* Tabs */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 border-b border-slate-200 pb-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab('PENDING')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+              activeTab === 'PENDING'
+                ? 'bg-[#006699] text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <span>รอการอนุมัติ</span>
+            {allPendingCount > 0 && (
+              <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">
+                {allPendingCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('HISTORY')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+              activeTab === 'HISTORY'
+                ? 'bg-[#006699] text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <span>ประวัติที่ดำเนินการแล้ว</span>
+            <span className="text-[10px] text-slate-400">({historyList.length})</span>
+          </button>
+        </div>
+
+        {/* Step Filter for Pending tab */}
+        {activeTab === 'PENDING' && (
+          <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-100 p-1 rounded-xl text-xs">
+            <button
+              onClick={() => setStepFilter('ALL')}
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                stepFilter === 'ALL' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              ทั้งหมด ({allPendingCount})
+            </button>
+            <button
+              onClick={() => setStepFilter('STEP1')}
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all flex items-center gap-1 ${
+                stepFilter === 'STEP1' ? 'bg-emerald-600 text-white shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>ขั้นที่ 1: หัวหน้าแพทย์</span>
+              <span className="text-[10px] bg-emerald-700/50 px-1.5 py-0.2 rounded-full">{step1PendingCount}</span>
+            </button>
+            <button
+              onClick={() => setStepFilter('STEP2')}
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all flex items-center gap-1 ${
+                stepFilter === 'STEP2' ? 'bg-purple-600 text-white shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>ขั้นที่ 2: นพ.ปริวรรธน์ (ผช.ผอ.)</span>
+              <span className="text-[10px] bg-purple-700/50 px-1.5 py-0.2 rounded-full">{step2PendingCount}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* List */}
@@ -162,16 +268,19 @@ export default function ApproverPage() {
         <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-300 p-8">
           <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
           <h3 className="text-sm font-semibold text-slate-700">
-            {activeTab === 'PENDING' ? 'ไม่มีคำขอที่รอการอนุมัติในขณะนี้' : 'ยังไม่มีประวัติการพิจารณา'}
+            {activeTab === 'PENDING' ? 'ไม่มีคำขอที่รอการอนุมัติในหมวดนี้' : 'ยังไม่มีประวัติการพิจารณา'}
           </h3>
           <p className="text-xs text-slate-400 mt-1">
-            เมื่อแพทย์ในแผนกยื่นใบลา ระบบจะส่งข้อความแจ้งเตือน 1-on-1 เข้า LINE และแสดงที่นี่ทันที
+            เมื่อแพทย์ยื่นใบลา ระบบจะส่งข้อความแจ้งเตือน 1-on-1 เข้า LINE และแสดงที่นี่ทันที
           </p>
         </div>
       ) : (
         <div className="space-y-4">
           {displayedList.map(req => {
             const isPending = req.status === 'PENDING';
+            const isStep1 = req.current_step === 1 && req.total_steps === 2;
+            const isStep2 = req.current_step === 2 || req.total_steps === 1;
+
             const periodText = req.half_day_type === 'MORNING' ? ' (ครึ่งวันเช้า)' :
                                req.half_day_type === 'AFTERNOON' ? ' (ครึ่งวันบ่าย)' : '';
 
@@ -193,7 +302,7 @@ export default function ApproverPage() {
                       />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-900 text-sm">
                           {req.doctor?.name || 'แพทย์'}
                         </span>
@@ -217,7 +326,7 @@ export default function ApproverPage() {
                           <span className="font-mono text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 ml-1.5 text-[11px] font-semibold">
                             {req.doctor.license_no}
                           </span>
-                        )} • แผนก{req.doctor?.department_name || 'อายุรกรรม'}
+                        )} • <span className="font-semibold text-slate-700">{req.doctor?.department_name || 'อายุรกรรม'}</span>
                       </div>
                     </div>
                   </div>
@@ -230,22 +339,85 @@ export default function ApproverPage() {
                       req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' :
                       req.status === 'REJECTED' ? 'bg-rose-100 text-rose-800' :
                       req.status === 'CANCELLED' ? 'bg-slate-100 text-slate-600' :
-                      'bg-amber-100 text-amber-800'
+                      isStep2 ? 'bg-purple-100 text-purple-800 ring-1 ring-purple-300' :
+                      'bg-amber-100 text-amber-800 ring-1 ring-amber-300'
                     }`}>
-                      {req.status === 'APPROVED' ? 'อนุมัติแล้ว' :
+                      {req.status === 'APPROVED' ? 'อนุมัติสมบูรณ์แล้ว' :
                        req.status === 'REJECTED' ? 'ไม่อนุมัติ' :
-                       req.status === 'CANCELLED' ? 'ยกเลิกแล้ว' : 'รอการพิจารณา'}
+                       req.status === 'CANCELLED' ? 'ยกเลิกแล้ว' :
+                       isStep2 ? 'รอ นพ.ปริวรรธน์ (ขั้นที่ 2)' : 'รอหัวหน้าแพทย์ (ขั้นที่ 1)'}
                     </span>
                   </div>
                 </div>
 
+                {/* 2-Step Flow Progress Tracker Indicator */}
+                <div className="my-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <div className="flex items-center justify-between text-[11px] mb-1.5">
+                    <span className="font-semibold text-slate-600">สถานะขั้นตอนการอนุมัติ (Approval Pipeline):</span>
+                    <span className="font-mono font-bold text-slate-500">
+                      {req.status === 'APPROVED' ? 'ผ่านครบทั้ง 2 ขั้นตอน' : `ขั้นที่ ${req.current_step || 1} จาก ${req.total_steps || 2}`}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {/* Step 1 Box */}
+                    <div className={`p-2 rounded-lg border flex items-center justify-between ${
+                      req.status === 'APPROVED' || req.current_step > 1
+                        ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900 font-semibold'
+                        : req.status === 'REJECTED' && req.current_step === 1
+                        ? 'bg-rose-50 border-rose-200 text-rose-800'
+                        : 'bg-amber-50/70 border-amber-200 text-amber-900 font-semibold animate-pulse'
+                    }`}>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center font-bold">1</span>
+                        <span>ขั้นที่ 1: หัวหน้าแพทย์</span>
+                      </div>
+                      <span className="text-[10px]">
+                        {req.status === 'APPROVED' || req.current_step > 1 ? '✅ ผ่านแล้ว' : '⏳ รอพิจารณา'}
+                      </span>
+                    </div>
+
+                    {/* Step 2 Box */}
+                    <div className={`p-2 rounded-lg border flex items-center justify-between ${
+                      req.status === 'APPROVED'
+                        ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900 font-semibold'
+                        : req.status === 'REJECTED' && req.current_step === 2
+                        ? 'bg-rose-50 border-rose-200 text-rose-800'
+                        : req.current_step === 2
+                        ? 'bg-purple-50 border-purple-200 text-purple-900 font-semibold animate-pulse'
+                        : 'bg-slate-100/70 border-slate-200 text-slate-400'
+                    }`}>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] flex items-center justify-center font-bold">2</span>
+                        <span>ขั้นที่ 2: นพ.ปริวรรธน์ (ผช.ผอ.)</span>
+                      </div>
+                      <span className="text-[10px]">
+                        {req.status === 'APPROVED' ? '✅ อนุมัติสมบูรณ์' : req.current_step === 2 ? '⏳ รอพิจารณา' : 'รอดำเนินการ'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Details Grid */}
-                <div className="py-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div className="py-2 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                   <div>
                     <span className="text-slate-400 block font-medium">ประเภทการลา:</span>
                     <span className="font-bold text-sm text-[#006699] mt-0.5 block">
                       {req.leave_type?.name_th}
                     </span>
+                    {req.reimbursement_requested !== null && req.reimbursement_requested !== undefined && (
+                      <span className={`inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        req.reimbursement_requested
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}>
+                        {req.reimbursement_requested ? '💰 ต้องการเบิกค่าใช้จ่าย' : 'ไม่เบิกค่าใช้จ่าย'}
+                      </span>
+                    )}
+                    {req.swap_date && (
+                      <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        🔄 สลับออกตรวจกับวันที่: {req.swap_date}
+                      </span>
+                    )}
                   </div>
 
                   <div>
@@ -300,23 +472,39 @@ export default function ApproverPage() {
                     </button>
 
                     <button
-                      onClick={() => handleApprove(req.id)}
+                      onClick={() => handleApprove(req)}
                       disabled={actionLoading}
-                      className="w-full sm:w-auto px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 active:scale-98"
+                      className={`w-full sm:w-auto px-5 py-2 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 active:scale-98 ${
+                        isStep1
+                          ? 'bg-emerald-600 hover:bg-emerald-700'
+                          : 'bg-purple-700 hover:bg-purple-800'
+                      }`}
                     >
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>อนุมัติทันที (1-Click Approve)</span>
+                      <span>
+                        {isStep1
+                          ? '✅ อนุมัติขั้นที่ 1 (ส่งต่อ นพ.ปริวรรธน์ ระเด่น)'
+                          : '✅ อนุมัติขั้นสุดท้าย (Final Approve - นพ.ปริวรรธน์)'}
+                      </span>
                     </button>
                   </div>
                 ) : (
                   req.approval_logs && req.approval_logs.length > 0 && (
-                    <div className="pt-3 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-between">
-                      <span>
-                        ดำเนินการโดย: <strong className="text-slate-700">{req.approval_logs[0]?.action}</strong>
-                      </span>
-                      <span className="text-slate-400">
-                        {new Date(req.approval_logs[0]?.acted_at).toLocaleString('th-TH')}
-                      </span>
+                    <div className="pt-3 border-t border-slate-100 text-xs text-slate-600 space-y-1">
+                      <span className="font-semibold text-slate-700 block">ประวัติการพิจารณา:</span>
+                      {req.approval_logs.map((log, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-[11px] bg-slate-50 px-2.5 py-1 rounded-lg">
+                          <span className="flex items-center gap-1">
+                            <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[9px] font-bold">
+                              {log.step_order || idx + 1}
+                            </span>
+                            <strong>{log.action}</strong> โดย {log.comments || 'อนุมัติเรียบร้อย'}
+                          </span>
+                          <span className="text-slate-400">
+                            {new Date(log.acted_at).toLocaleString('th-TH')}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   )
                 )}
@@ -339,35 +527,30 @@ export default function ApproverPage() {
             </p>
 
             <textarea
-              rows={3}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="ระบุเหตุผล เช่น ติดภารกิจออกตรวจห้องผ่าตัด, โควตาแพทย์แผนกไม่เพียงพอ..."
-              className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-rose-500 focus:outline-hidden mb-4"
-              required
+              placeholder="ระบุเหตุผล เช่น ติดภารกิจออกตรวจ, โควตาแพทย์ไม่เพียงพอ..."
+              className="w-full h-24 p-3 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none mb-4"
             />
 
             <div className="flex items-center justify-end gap-2">
               <button
-                type="button"
                 onClick={() => setRejectModalReq(null)}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50"
               >
                 ยกเลิก
               </button>
               <button
-                type="button"
                 onClick={handleConfirmReject}
                 disabled={actionLoading}
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
               >
-                {actionLoading ? 'กำลังบันทึก...' : 'ยืนยันการไม่อนุมัติ'}
+                ยืนยันการไม่อนุมัติ
               </button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }

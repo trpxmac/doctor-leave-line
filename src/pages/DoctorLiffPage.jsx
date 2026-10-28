@@ -205,6 +205,8 @@ export default function DoctorLiffPage() {
   const [reason, setReason] = useState('');
   const [uploadLater, setUploadLater] = useState(false);
   const [files, setFiles] = useState([]);
+  const [reimbursementRequested, setReimbursementRequested] = useState(false);
+  const [swapDate, setSwapDate] = useState('');
 
   // Shift Conflict & Duty Handover State (Feature #26)
   const [shiftConflict, setShiftConflict] = useState(null);
@@ -241,10 +243,26 @@ export default function DoctorLiffPage() {
     fetchTypes();
   }, [currentDoctor]);
 
-  // Reset attachment state when leave type changes
+  // Reset attachment state and adjust default start date when leave type changes
   useEffect(() => {
     setUploadLater(false);
     setFiles([]);
+    setErrorMessage('');
+    if (selectedType) {
+      if (!selectedType.allows_half_day && halfDayType !== 'FULL_DAY') {
+        setHalfDayType('FULL_DAY');
+      }
+      if (selectedType.min_notice_days > 0) {
+        const minValidDate = addDaysToDate(todayStr, selectedType.min_notice_days);
+        if (startDate < minValidDate) {
+          setStartDate(minValidDate);
+          setEndDate(leaveMode === 'RANGE' ? addDaysToDate(minValidDate, 1) : minValidDate);
+        }
+      } else if (!selectedType.allows_backdate && startDate < todayStr) {
+        setStartDate(todayStr);
+        setEndDate(todayStr);
+      }
+    }
   }, [selectedType]);
 
   // Fetch Balances for current doctor
@@ -338,7 +356,7 @@ export default function DoctorLiffPage() {
   );
 
   // Real-time Duration & Leave Balance Calculations
-  const countMode = selectedType?.count_mode || 'WORKING_DAYS';
+  const countMode = selectedType?.count_mode || 'CALENDAR_DAYS';
   const currentFinalEnd = leaveMode === 'SINGLE' || halfDayType !== 'FULL_DAY' ? startDate : (endDate || startDate);
   const effectiveHalfDay = leaveMode === 'SINGLE' ? halfDayType : 'FULL_DAY';
   const activeShifts = durationPreview?.shifts_in_range || shiftConflict?.conflicts || [];
@@ -347,11 +365,31 @@ export default function DoctorLiffPage() {
   const returnToWorkDate = getNextWorkingDay(currentFinalEnd, durationPreview?.holidays_in_range);
 
   const selectedBalance = balances.find(b => b.leave_type_id === selectedType?.id);
-  const remainingDays = selectedBalance !== undefined ? Number(selectedBalance.remaining_days) : null;
-  const isPersonalQuotaExhausted = selectedBalance !== undefined && remainingDays !== null && remainingDays <= 0;
-  const isRequestedExceeded = selectedBalance !== undefined && remainingDays !== null && activeDuration > remainingDays;
+  const nonDayQuotaCodes = ['TRAINING', 'PERSONAL', 'SHIFT_SWAP', 'UNPAID'];
+  const isDayQuotaType = selectedType && (!nonDayQuotaCodes.includes(selectedType.code) || Number(selectedBalance?.total_quota || 0) > 0);
+  const remainingDays = isDayQuotaType && selectedBalance !== undefined ? Number(selectedBalance.remaining_days) : null;
+
+  const isTrainingLimitReached = Boolean(
+    selectedType?.code === 'TRAINING' &&
+    (selectedBalance?.request_count_this_year || 0) >= (selectedType?.max_requests_per_year || 1)
+  );
+  const isPersonalQuotaExhausted = (isDayQuotaType && selectedBalance !== undefined && remainingDays !== null && remainingDays <= 0) || isTrainingLimitReached;
+  const isRequestedExceeded = isDayQuotaType && selectedBalance !== undefined && remainingDays !== null && activeDuration > remainingDays;
+  const isMaxDaysPerRequestExceeded = Boolean(
+    selectedType?.max_days_per_request && activeDuration > Number(selectedType.max_days_per_request)
+  );
+  const isBackdateNotAllowed = Boolean(selectedType && !selectedType.allows_backdate && startDate < todayStr);
+  const diffNoticeCalendarDays = (() => {
+    if (!startDate) return 0;
+    const [tY, tM, tD] = todayStr.split('-').map(Number);
+    const [sY, sM, sD] = startDate.split('-').map(Number);
+    return Math.round((new Date(sY, sM - 1, sD) - new Date(tY, tM - 1, tD)) / 86400000);
+  })();
+  const isNoticeDaysInsufficient = Boolean(
+    selectedType?.min_notice_days > 0 && diffNoticeCalendarDays < Number(selectedType.min_notice_days)
+  );
   const isDeptQuotaFull = Boolean(quotaInfo && quotaInfo.status === 'FULL' && !isEmergency);
-  const isBlockedByQuota = isPersonalQuotaExhausted || isRequestedExceeded || isDeptQuotaFull;
+  const isBlockedByQuota = isPersonalQuotaExhausted || isRequestedExceeded || isMaxDaysPerRequestExceeded || isDeptQuotaFull;
 
   // Attachment Mandatory Check (Threshold Rule)
   const isAttachmentMandatory = Boolean(
@@ -368,21 +406,41 @@ export default function DoctorLiffPage() {
       return;
     }
 
-    // Quota Full Checks
+    // Policy & Quota Checks
     if (activeDuration === 0) {
       setErrorMessage('ช่วงวันที่ท่านเลือกตรงกับวันหยุดทั้งหมด (ไม่มีวันทำการที่ต้องลา)');
+      return;
+    }
+    if (isTrainingLimitReached) {
+      setErrorMessage(`ไม่สามารถยื่นลาได้ เนื่องจากสิทธิ์${selectedType.name_th} ใช้ได้ปีละ 1 ครั้ง และท่านได้ใช้สิทธิ์ในปีนี้ไปแล้ว`);
       return;
     }
     if (isPersonalQuotaExhausted) {
       setErrorMessage(`ไม่สามารถยื่นลาได้ เนื่องจากสิทธิ์${selectedType.name_th}คงเหลือ 0 วัน (โควตาเต็ม)`);
       return;
     }
+    if (isMaxDaysPerRequestExceeded) {
+      setErrorMessage(`การ${selectedType.name_th} กำหนดให้ลาต่อเนื่องได้ไม่เกิน ${selectedType.max_days_per_request} วันต่อครั้ง (ท่านเลือก ${activeDuration} วัน)`);
+      return;
+    }
     if (isRequestedExceeded) {
       setErrorMessage(`สิทธิ์วันลาคงเหลือไม่เพียงพอ (ต้องการลา ${durationPreview?.duration_days || activeDuration} วัน แต่คงเหลือ ${remainingDays} วัน)`);
       return;
     }
+    if (isBackdateNotAllowed) {
+      setErrorMessage(`การ${selectedType.name_th}ต้องบันทึกก่อนลาเท่านั้น (ไม่อนุญาตให้บันทึกลาย้อนหลัง)`);
+      return;
+    }
+    if (isNoticeDaysInsufficient) {
+      setErrorMessage(`การ${selectedType.name_th}ต้องส่งวันลาล่วงหน้าอย่างน้อย ${selectedType.min_notice_days} วันก่อนวันเริ่มลา`);
+      return;
+    }
     if (isDeptQuotaFull) {
       setErrorMessage(`โควตาการลาของแผนก${quotaInfo.department_name}ในวันที่เลือกเต็มแล้ว (${quotaInfo.current_on_leave}/${quotaInfo.max_allowed} ท่าน) ไม่สามารถยื่นลาได้`);
+      return;
+    }
+    if (selectedType.code === 'SHIFT_SWAP' && !swapDate) {
+      setErrorMessage('กรุณาระบุวันที่ต้องการสลับออกตรวจ');
       return;
     }
 
@@ -397,7 +455,15 @@ export default function DoctorLiffPage() {
 
     // Attachment Requirement Validation
     if (isAttachmentMandatory && (!files || files.length === 0) && !uploadLater) {
-      setErrorMessage(`การลา${selectedType.name_th} (${activeDuration} วัน) จำเป็นต้องมีเอกสารประกอบตามระเบียบ กรุณาแนบไฟล์ หรือติ๊กเลือก 'สะดวกแนบเอกสารตามหลัง'`);
+      if (selectedType.code === 'PERSONAL') {
+        setErrorMessage('การลากิจ (ครอบครัวเสียชีวิต) ต้องแนบใบมรณบัตร หรือติ๊กเลือก "ส่งให้เจ้าหน้าที่หลังจบงาน"');
+      } else if (selectedType.code === 'UNPAID') {
+        setErrorMessage('การลาไม่รับค่าตอบแทน ต้องแนบจดหมายเรียนถึงผู้อำนวยการแจ้งถึงเหตุผล');
+      } else if (selectedType.code === 'SICK') {
+        setErrorMessage(`การลาป่วยตั้งแต่ 3 วันขึ้นไป (${activeDuration} วัน) ต้องแนบใบรับรองแพทย์ หรือติ๊กเลือก "สะดวกแนบเอกสารตามหลัง"`);
+      } else {
+        setErrorMessage(`การ${selectedType.name_th} (${activeDuration} วัน) จำเป็นต้องมีเอกสารประกอบตามระเบียบ กรุณาแนบไฟล์ หรือติ๊กเลือก 'สะดวกแนบเอกสารตามหลัง'`);
+      }
       return;
     }
 
@@ -416,6 +482,12 @@ export default function DoctorLiffPage() {
       formData.append('half_day_type', effectiveHalfDay);
       formData.append('reason', reason);
       formData.append('upload_later', uploadLater ? 'true' : 'false');
+      if (selectedType.code === 'TRAINING' || selectedType.has_reimbursement_option) {
+        formData.append('reimbursement_requested', reimbursementRequested ? 'true' : 'false');
+      }
+      if (selectedType.code === 'SHIFT_SWAP' && swapDate) {
+        formData.append('swap_date', swapDate);
+      }
       if (substituteDoctorId) {
         formData.append('substitute_doctor_id', substituteDoctorId);
       }
@@ -460,12 +532,15 @@ export default function DoctorLiffPage() {
       fetchBalances();
       refreshDoctors();
       setLeaveMode('SINGLE');
-      setStartDate(todayStr);
-      setEndDate(todayStr);
+      const resetStart = selectedType?.min_notice_days > 0 ? addDaysToDate(todayStr, selectedType.min_notice_days) : todayStr;
+      setStartDate(resetStart);
+      setEndDate(resetStart);
       setHalfDayType('FULL_DAY');
       setReason('');
       setFiles([]);
       setUploadLater(false);
+      setReimbursementRequested(false);
+      setSwapDate('');
       setSubstituteDoctorId('');
       setDutyHandoverNotes('');
     } catch (err) {
@@ -552,8 +627,11 @@ export default function DoctorLiffPage() {
               {leaveTypes.map(lt => {
                 const isSelected = selectedType?.id === lt.id;
                 const bal = balances.find(b => b.leave_type_id === lt.id);
-                const hasQuota = bal !== undefined && lt.code !== 'UNPAID' && (Number(bal.total_quota) > 0 || Number(bal.used_days) > 0 || Number(bal.pending_days) > 0);
-                const isFull = hasQuota && Number(bal.remaining_days) <= 0;
+                const isTrainingType = lt.code === 'TRAINING';
+                const trainingUsedCount = bal?.request_count_this_year || 0;
+                const trainingMaxCount = lt.max_requests_per_year || 1;
+                const hasQuota = bal !== undefined && !['TRAINING', 'PERSONAL', 'SHIFT_SWAP', 'UNPAID'].includes(lt.code) && Number(bal.total_quota) > 0;
+                const isFull = (hasQuota && Number(bal.remaining_days) <= 0) || (isTrainingType && trainingUsedCount >= trainingMaxCount);
 
                 return (
                   <button
@@ -577,7 +655,7 @@ export default function DoctorLiffPage() {
                       <div className="flex items-center gap-1.5">
                         {isFull && (
                           <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
-                            โควตาเต็ม
+                            {isTrainingType ? 'ใช้สิทธิ์แล้ว' : 'โควตาเต็ม'}
                           </span>
                         )}
                         <span
@@ -588,7 +666,15 @@ export default function DoctorLiffPage() {
                     </div>
                     <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between gap-1 flex-wrap">
                       <span>{lt.allows_half_day ? 'ลาครึ่งวันได้' : 'เต็มวันเท่านั้น'}</span>
-                      {hasQuota ? (
+                      {isTrainingType ? (
+                        <span className={`font-semibold px-1.5 py-0.5 rounded text-[10px] ${
+                          isFull
+                            ? 'text-rose-700 bg-rose-50 border border-rose-200 font-bold'
+                            : 'text-violet-700 bg-violet-50 border border-violet-200'
+                        }`}>
+                          {isFull ? `ใช้ครบ ${trainingUsedCount}/${trainingMaxCount} ครั้ง` : `1 ครั้ง/ปี`}
+                        </span>
+                      ) : hasQuota ? (
                         isSelected && activeDuration > 0 ? (
                           <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[10px] flex items-center gap-1">
                             <span className="text-slate-400 line-through text-[9px]">{bal.remaining_days}</span>
@@ -604,9 +690,11 @@ export default function DoctorLiffPage() {
                         <span className={`font-semibold px-2 py-0.5 rounded text-[10px] ${
                           lt.code === 'UNPAID'
                             ? 'text-slate-600 bg-slate-100 border border-slate-200/80'
-                            : 'text-amber-700 bg-amber-50 border border-amber-200/60'
+                            : lt.code === 'SHIFT_SWAP'
+                              ? 'text-emerald-700 bg-emerald-50 border border-emerald-200/80'
+                              : 'text-amber-700 bg-amber-50 border border-amber-200/60'
                         }`}>
-                          {lt.code === 'UNPAID' ? 'ไม่จำกัดสิทธิ์' : 'ตามเกณฑ์ รพ.'}
+                          {lt.code === 'UNPAID' ? 'สูงสุด 1 เดือน' : lt.code === 'SHIFT_SWAP' ? 'สลับวันตรวจ' : 'ตามเกณฑ์ รพ.'}
                         </span>
                       )}
                     </div>
@@ -615,20 +703,170 @@ export default function DoctorLiffPage() {
               })}
             </div>
 
+            {/* Selected Leave Type Policy & Conditions Banner */}
+            {selectedType && (
+              <div className="mt-2.5 p-3 bg-gradient-to-br from-sky-50/90 to-slate-50 border border-sky-200/80 rounded-xl text-xs space-y-2">
+                <div className="flex items-start gap-2">
+                  <Info className="w-4 h-4 text-[#006699] shrink-0 mt-0.5" />
+                  <div className="space-y-1 flex-1">
+                    <div className="font-bold text-slate-800 flex items-center justify-between flex-wrap gap-1">
+                      <span>เงื่อนไข: {selectedType.name_th}</span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white text-[#006699] border border-sky-200">
+                        คำนวณวันลาตามปฏิทิน
+                      </span>
+                    </div>
+                    {selectedType.code === 'TRAINING' && (
+                      <ul className="text-[11px] text-slate-600 list-disc list-inside space-y-0.5">
+                        <li>บันทึกก่อนลาล่วงหน้าอย่างน้อย <strong>7 วัน</strong></li>
+                        <li>ใช้สิทธิ์ได้ <strong>ปีละ 1 ครั้ง</strong> (คำนวณวันลาตามปฏิทิน)</li>
+                        <li>กรุณาเลือกความประสงค์ว่า <strong>ต้องการเบิกค่าใช้จ่ายหรือไม่</strong> ด้านล่าง</li>
+                      </ul>
+                    )}
+                    {selectedType.code === 'VACATION' && (
+                      <ul className="text-[11px] text-slate-600 list-disc list-inside space-y-0.5">
+                        <li>สิทธิ์ <strong>20 วัน/ปี</strong> (เริ่มใช้งานได้หลังทำงานครบ 6 เดือน เฉพาะ Full-time)</li>
+                        <li>ลาต่อเนื่องได้ <strong>ไม่เกิน 10 วัน</strong> ทั้งในเดือนและคร่อมเดือน (นับรวมวันหยุดประจำ)</li>
+                        <li>บันทึกก่อนลาเท่านั้น ส่งวันลาล่วงหน้าอย่างน้อย <strong>7 วัน</strong></li>
+                        <li>ต้องมีวันทำงานเหลือในเดือนไม่น้อยกว่า <strong>15 วัน</strong> (คำนวณวันลาตามปฏิทิน)</li>
+                      </ul>
+                    )}
+                    {selectedType.code === 'PERSONAL' && (
+                      <ul className="text-[11px] text-slate-600 list-disc list-inside space-y-0.5">
+                        <li>ลากิจ (ครอบครัวเสียชีวิต) คำนวณวันลาตามปฏิทิน</li>
+                        <li>ต้อง <strong>แนบใบมรณบัตร</strong> หรือเลือกส่งให้เจ้าหน้าที่หลังจบงาน (บันทึกลาย้อนหลังได้)</li>
+                      </ul>
+                    )}
+                    {selectedType.code === 'ORDINATION' && (
+                      <ul className="text-[11px] text-slate-600 list-disc list-inside space-y-0.5">
+                        <li>ลาอุปสมบท ได้ไม่เกิน <strong>120 วัน</strong> (คำนวณวันลาตามปฏิทิน)</li>
+                      </ul>
+                    )}
+                    {selectedType.code === 'MATERNITY' && (
+                      <ul className="text-[11px] text-slate-600 list-disc list-inside space-y-0.5">
+                        <li>ลาคลอดบุตร ได้ไม่เกิน <strong>90 วัน</strong> (คำนวณวันลาตามปฏิทิน)</li>
+                      </ul>
+                    )}
+                    {selectedType.code === 'SHIFT_SWAP' && (
+                      <ul className="text-[11px] text-slate-600 list-disc list-inside space-y-0.5">
+                        <li>สำหรับขอสลับวันออกตรวจ กรุณาระบุวันที่ต้องการสลับออกตรวจด้านล่าง</li>
+                      </ul>
+                    )}
+                    {selectedType.code === 'SICK' && (
+                      <ul className="text-[11px] text-slate-600 list-disc list-inside space-y-0.5">
+                        <li>กรณีลาตั้งแต่ <strong>3 วันขึ้นไป ต้องแนบใบรับรองแพทย์</strong></li>
+                        <li>สามารถบันทึกลาย้อนหลังได้ • คำนวณวันลาตามปฏิทิน</li>
+                      </ul>
+                    )}
+                    {selectedType.code === 'UNPAID' && (
+                      <ul className="text-[11px] text-slate-600 list-disc list-inside space-y-0.5">
+                        <li>ลาได้สูงสุดต่อเนื่องไม่เกิน <strong>1 เดือน (30 วัน)</strong> คำนวณวันลาตามปฏิทิน</li>
+                        <li>ต้องแนบ <strong>จดหมายเรียนถึงผู้อำนวยการ</strong> แจ้งถึงเหตุผลในการลา</li>
+                      </ul>
+                    )}
+                  </div>
+                </div>
+
+                {/* Expense Reimbursement Button for TRAINING (ลาฝึกอบรม/ประชุมวิชาการ) */}
+                {(selectedType.code === 'TRAINING' || selectedType.has_reimbursement_option) && (
+                  <div className="pt-2 border-t border-sky-200/80">
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      ต้องการเบิกค่าใช้จ่ายหรือไม่ <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setReimbursementRequested(true)}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all ${
+                          reimbursementRequested === true
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300'
+                        }`}
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        <span>เบิก (ต้องการเบิกค่าใช้จ่าย)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReimbursementRequested(false)}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all ${
+                          reimbursementRequested === false
+                            ? 'bg-slate-700 text-white border-slate-700 shadow-xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <span>ไม่เบิก (ไม่เบิกค่าใช้จ่าย)</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Shift Swap Date Input for SHIFT_SWAP (ลาสลับวันออกตรวจ) */}
+                {selectedType.code === 'SHIFT_SWAP' && (
+                  <div className="pt-2 border-t border-sky-200/80 space-y-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        วันที่ต้องการสลับไปออกตรวจแทน <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={swapDate}
+                        onChange={(e) => setSwapDate(e.target.value)}
+                        className="w-full text-xs p-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden font-medium text-slate-800"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        แพทย์ที่สลับวันออกตรวจด้วย (ถ้ามี)
+                      </label>
+                      <select
+                        value={substituteDoctorId}
+                        onChange={(e) => setSubstituteDoctorId(e.target.value)}
+                        className="w-full text-xs font-medium border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-[#006699] outline-hidden"
+                      >
+                        <option value="">-- เลือกแพทย์ที่สลับวันออกตรวจในแผนก (ถ้ามี) --</option>
+                        {departmentColleagues.map((colleague) => (
+                          <option key={colleague.id} value={colleague.id}>
+                            {colleague.prefix_th}{colleague.first_name_th} {colleague.last_name_th}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Quota Exhausted Alert */}
             {isPersonalQuotaExhausted && (
               <div className="mt-2.5 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-start gap-2.5 animate-in fade-in">
                 <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="font-bold">สิทธิ์วันลาคงเหลือหมดแล้ว (โควตาเต็ม 0 วัน):</strong>
+                  <strong className="font-bold">
+                    {isTrainingLimitReached ? 'ใช้สิทธิ์ครบ 1 ครั้ง/ปีแล้ว:' : 'สิทธิ์วันลาคงเหลือหมดแล้ว (โควตาเต็ม 0 วัน):'}
+                  </strong>
                   <p className="mt-0.5 text-[11px] leading-relaxed text-rose-700">
-                    ท่านใช้สิทธิ์ <strong>{selectedType?.name_th}</strong> ครบตามโควตาประจำปีแล้ว ระบบไม่อนุญาตให้กดส่งใบลาประเภทนี้ (ปุ่มส่งใบลาถูกปิดใช้งาน)
+                    {isTrainingLimitReached
+                      ? `สิทธิ์การ${selectedType?.name_th} กำหนดให้ใช้ได้ปีละ 1 ครั้งเท่านั้น และท่านมีประวัติการใช้สิทธิ์ในปีนี้แล้ว`
+                      : `ท่านใช้สิทธิ์ ${selectedType?.name_th} ครบตามโควตาประจำปีแล้ว ระบบไม่อนุญาตให้กดส่งใบลาประเภทนี้`}
                   </p>
                 </div>
               </div>
             )}
 
-            {isRequestedExceeded && !isPersonalQuotaExhausted && (
+            {isMaxDaysPerRequestExceeded && !isPersonalQuotaExhausted && (
+              <div className="mt-2.5 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-start gap-2.5 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="font-bold">เกินจำนวนวันลาสูงสุดต่อครั้ง ({selectedType?.max_days_per_request} วัน):</strong>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-rose-700">
+                    การ{selectedType?.name_th} กำหนดให้ลาต่อเนื่องได้ไม่เกิน {selectedType?.max_days_per_request} วัน (ท่านเลือก {activeDuration} วัน) กรุณาปรับลดช่วงวันลา
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {isRequestedExceeded && !isPersonalQuotaExhausted && !isMaxDaysPerRequestExceeded && (
               <div className="mt-2.5 p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs flex items-start gap-2.5 animate-in fade-in">
                 <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <div>
@@ -898,11 +1136,11 @@ export default function DoctorLiffPage() {
                   <CheckCircle className="w-4 h-4 text-[#006699] shrink-0" />
                   <div>
                     <span className="font-bold text-[#006699]">เต็มวันตลอดช่วง (Full Day)</span>
-                    <p className="text-[11px] text-slate-500">ระบบคำนวณแบบเต็มวันสำหรับทุกวันทำการในช่วงที่เลือก</p>
+                    <p className="text-[11px] text-slate-500">ระบบคำนวณวันลาตามปฏิทิน (นับรวมวันหยุดประจำ)</p>
                   </div>
                 </div>
                 <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-white border border-sky-200 text-[#006699] shadow-2xs">
-                  {activeDuration} วันทำการ
+                  {activeDuration} วัน
                 </span>
               </div>
             )}
@@ -920,7 +1158,7 @@ export default function DoctorLiffPage() {
                   <div className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                     <span className="text-[#006699]">{activeDuration} วัน</span>
                     <span className="text-[10px] text-slate-500 font-normal">
-                      ({countMode === 'WORKING_DAYS' ? 'นับเฉพาะวันทำการ จันทร์-ศุกร์' : 'นับทุกวันตามปฏิทิน'})
+                      (คำนวณวันลาตามปฏิทิน นับรวมวันหยุดประจำ)
                     </span>
                   </div>
                 </div>
@@ -932,57 +1170,21 @@ export default function DoctorLiffPage() {
 
             {/* Range Breakdown Details */}
             {leaveMode === 'RANGE' && (
-              <div className="pt-2 border-t border-sky-200/60 grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px]">
+              <div className="pt-2 border-t border-sky-200/60 grid grid-cols-3 gap-1.5 text-[11px]">
                 <div className="bg-white/90 p-2 rounded-lg border border-sky-100 text-center">
-                  <div className="text-slate-400 text-[10px]">วันปฏิทินทั้งหมด</div>
+                  <div className="text-slate-400 text-[10px]">วันตามปฏิทิน</div>
                   <div className="font-bold text-slate-700">{breakdown.totalCalendarDays} วัน</div>
                 </div>
                 <div className="bg-white/90 p-2 rounded-lg border border-sky-100 text-center">
-                  <div className="text-slate-400 text-[10px]">วันหยุด ส.-อา. (เว้น)</div>
-                  <div className="font-bold text-slate-600">
-                    {Math.max(0, breakdown.weekendDays - (durationPreview?.weekend_shifts_count || breakdown.weekendShiftsCount || 0))} วัน
+                  <div className="text-slate-400 text-[10px]">เพดานลาต่อเนื่อง</div>
+                  <div className="font-bold text-slate-700">
+                    {selectedType?.max_days_per_request ? `ไม่เกิน ${selectedType.max_days_per_request} วัน` : 'ตามเกณฑ์ รพ.'}
                   </div>
                 </div>
-                <div className="bg-white/90 p-2 rounded-lg border border-sky-100 text-center">
-                  <div className="text-slate-400 text-[10px]">วันหยุด รพ. (เว้น)</div>
-                  <div className="font-bold text-slate-600">{breakdown.holidaysCount} วัน</div>
-                </div>
                 <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-200 text-center">
-                  <div className="text-emerald-700 text-[10px] font-semibold">วันลาสุทธิที่หัก</div>
+                  <div className="text-emerald-700 text-[10px] font-semibold">วันลาสุทธิ (ตามปฏิทิน)</div>
                   <div className="font-extrabold text-emerald-700">{activeDuration} วัน</div>
                 </div>
-              </div>
-            )}
-
-            {/* Weekend Shift Alert Badge */}
-            {(durationPreview?.weekend_shifts_count > 0 || breakdown.weekendShiftsCount > 0) && (
-              <div className="text-[11px] text-sky-900 bg-sky-50 p-2.5 rounded-lg border border-sky-200 flex items-start gap-2 animate-in fade-in">
-                <Activity className="w-4 h-4 text-[#006699] shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold text-[#006699]">
-                    ตรวจพบเวรปฏิบัติงานในวันหยุด ({durationPreview?.weekend_shifts_count || breakdown.weekendShiftsCount} วัน):{' '}
-                  </span>
-                  <span>ระบบนับรวมเป็นวันลาเนื่องจากท่านมีตารางเวรที่ต้องขึ้นตรวจ (กรุณาระบุแพทย์ปฏิบัติหน้าที่แทนด้านล่าง)</span>
-                </div>
-              </div>
-            )}
-
-            {/* Holidays in range tags */}
-            {durationPreview?.holidays_in_range?.length > 0 && (
-              <div className="text-[11px] text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200 flex items-start gap-1.5 animate-in fade-in">
-                <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold">เว้นวันหยุดนักขัตฤกษ์ของ รพ. ({durationPreview.holidays_in_range.length} วัน): </span>
-                  <span>{durationPreview.holidays_in_range.map(h => `${h.name_th} (${formatThaiDateShort(h.holiday_date)})`).join(', ')}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Zero Working Days Alert */}
-            {activeDuration === 0 && (
-              <div className="text-[11px] text-rose-800 bg-rose-50 p-2 rounded-lg border border-rose-200 flex items-center gap-1.5 animate-in fade-in">
-                <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                <span>ช่วงวันที่ท่านเลือกตรงกับวันหยุดทั้งหมด (ไม่มีวันทำการหรือเวรที่ต้องลา) ระบบจะไม่อนุญาตให้ส่งใบลา 0 วัน</span>
               </div>
             )}
           </div>
@@ -1101,7 +1303,7 @@ export default function DoctorLiffPage() {
             />
           </div>
 
-          {/* 5. เอกสารแนบ หรือ แนบตามหลัง (แสดงเฉพาะประเภทที่เปิดใช้งานเอกสารประกอบ เช่น ลาป่วย, ลาอบรม) */}
+          {/* 5. เอกสารแนบ หรือ แนบตามหลัง */}
           {selectedType?.requires_attachment && (
             <div className={`p-3.5 rounded-xl border transition-all ${
               isAttachmentMandatory 
@@ -1113,19 +1315,25 @@ export default function DoctorLiffPage() {
                   <Paperclip className="w-3.5 h-3.5 text-slate-500" />
                   5. เอกสารประกอบ {isAttachmentMandatory && <span className="text-rose-500">*</span>}
                   <span className="text-[11px] font-normal text-slate-500">
-                    (ใบรับรองแพทย์ / หนังสือเชิญ)
+                    {selectedType.code === 'PERSONAL'
+                      ? '(ใบมรณบัตร)'
+                      : selectedType.code === 'UNPAID'
+                        ? '(จดหมายเรียนถึงผู้อำนวยการแจ้งถึงเหตุผล)'
+                        : selectedType.code === 'SICK'
+                          ? '(ใบรับรองแพทย์ กรณีลา 3 วันขึ้นไป)'
+                          : '(ใบรับรองแพทย์ / หนังสือเชิญ)'}
                   </span>
                 </label>
                 <div>
                   {isAttachmentMandatory ? (
                     <span className="inline-flex items-center gap-1 text-[10.5px] text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full font-semibold">
                       <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                      จำเป็นต้องแนบ {selectedType.attachment_threshold_days > 0 ? `(ลา ${activeDuration} วัน เกินเกณฑ์ ${selectedType.attachment_threshold_days} วัน)` : ''}
+                      จำเป็นต้องแนบ {selectedType.attachment_threshold_days > 0 ? `(ลา ${activeDuration} วัน ตั้งแต่ 3 วันขึ้นไป)` : ''}
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-[10.5px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-medium">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                      ไม่บังคับ {selectedType.attachment_threshold_days > 0 ? `(ลา ${activeDuration} วัน ยังไม่เกิน ${selectedType.attachment_threshold_days} วัน แนบหรือไม่ก็ได้)` : '(ตามความสะดวก)'}
+                      ไม่บังคับ {selectedType.attachment_threshold_days > 0 ? `(ลา ${activeDuration} วัน น้อยกว่า 3 วัน แนบหรือไม่ก็ได้)` : '(ตามความสะดวก)'}
                     </span>
                   )}
                 </div>
@@ -1158,7 +1366,9 @@ export default function DoctorLiffPage() {
                 />
                 <div className="text-xs">
                   <span className={`font-medium ${uploadLater ? 'text-[#006699] font-bold' : 'text-slate-700'}`}>
-                    สะดวกแนบเอกสารตามหลัง (ภายใน {selectedType?.attachment_deadline_days || 3} วัน)
+                    {selectedType.code === 'PERSONAL'
+                      ? `ส่งใบมรณบัตรให้เจ้าหน้าที่หลังจบงาน (ภายใน ${selectedType?.attachment_deadline_days || 7} วัน)`
+                      : `สะดวกแนบเอกสารตามหลัง (ภายใน ${selectedType?.attachment_deadline_days || 3} วัน)`}
                   </span>
                   <p className="text-[10px] text-slate-400 italic mt-0.5">
                     * ทางเลือกสำหรับแพทย์เมื่อยังไม่มีเอกสารติดตัว ระบบจะส่ง LINE Reminder แจ้งเตือนพร้อมลิงก์ให้อัปโหลดตามหลัง
@@ -1169,7 +1379,13 @@ export default function DoctorLiffPage() {
               {isAttachmentMandatory && !uploadLater && (!files || files.length === 0) && (
                 <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200/80 rounded-lg p-2 flex items-center gap-1.5">
                   <span className="font-bold">คำแนะนำ:</span>
-                  <span>กรุณาเลือกไฟล์แนบ <b>หรือ</b> ติ๊กช่อง 'สะดวกแนบเอกสารตามหลัง' อย่างใดอย่างหนึ่งครับ</span>
+                  <span>
+                    {selectedType.code === 'PERSONAL'
+                      ? 'กรุณาแนบไฟล์ใบมรณบัตร หรือติ๊กช่อง "ส่งใบมรณบัตรให้เจ้าหน้าที่หลังจบงาน"'
+                      : selectedType.code === 'UNPAID'
+                        ? 'กรุณาแนบจดหมายเรียนถึงผู้อำนวยการแจ้งถึงเหตุผล'
+                        : 'กรุณาเลือกไฟล์แนบ หรือติ๊กช่อง "สะดวกแนบเอกสารตามหลัง" อย่างใดอย่างหนึ่งครับ'}
+                  </span>
                 </div>
               )}
             </div>
@@ -1186,10 +1402,20 @@ export default function DoctorLiffPage() {
           >
             {submitting ? (
               <span>กำลังประมวลผลและส่ง LINE...</span>
+            ) : isTrainingLimitReached ? (
+              <>
+                <ShieldAlert className="w-4 h-4 text-rose-500" />
+                <span>🚫 ใช้สิทธิ์ครบ 1 ครั้ง/ปีแล้ว ไม่สามารถยื่นได้</span>
+              </>
             ) : isPersonalQuotaExhausted ? (
               <>
                 <ShieldAlert className="w-4 h-4 text-rose-500" />
                 <span>🚫 สิทธิ์วันลาหมดแล้ว (โควตาเต็ม 0 วัน) ไม่สามารถยื่นได้</span>
+              </>
+            ) : isMaxDaysPerRequestExceeded ? (
+              <>
+                <AlertTriangle className="w-4 h-4 text-rose-500" />
+                <span>🚫 เกินจำนวนวันลาสูงสุดต่อครั้ง (ไม่เกิน {selectedType?.max_days_per_request} วัน)</span>
               </>
             ) : isRequestedExceeded ? (
               <>
@@ -1227,8 +1453,8 @@ export default function DoctorLiffPage() {
             <h3 className="text-base font-bold text-slate-800">
               ยื่นใบลาสำเร็จเรียบร้อย!
             </h3>
-            <p className="text-xs text-slate-500 mt-1 mb-4 leading-relaxed">
-              ระบบได้ส่ง LINE Flex Message แบบ 1-on-1 ไปยังหัวหน้าแผนกเรียบร้อยแล้ว
+            <p className="text-xs text-slate-500 mt-1 mb-3 leading-relaxed">
+              ระบบส่ง LINE Flex Message แจ้งเตือนไปยังหัวหน้าแพทย์เพื่อพิจารณาขั้นที่ 1 และจะส่งต่อให้ นพ.ปริวรรธน์ ระเด่น (ผู้ช่วย ผอ.รพ.) พิจารณาขั้นสุดท้าย
             </p>
 
             {/* Leave Details Card */}
@@ -1237,6 +1463,12 @@ export default function DoctorLiffPage() {
                 <span className="text-slate-500 font-medium">เลขที่ใบลา:</span>
                 <span className="font-mono font-bold text-[#006699] bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
                   {successResult.request?.request_no}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">สายอนุมัติ:</span>
+                <span className="font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded text-[11px]">
+                  หัวหน้าแพทย์ &gt;&gt; นพ.ปริวรรธน์ (ผช.ผอ.)
                 </span>
               </div>
               <div className="flex items-center justify-between">

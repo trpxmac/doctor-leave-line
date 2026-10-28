@@ -182,6 +182,24 @@ export function buildDoctorSubmittedFlex(request, doctor, leaveType) {
               { type: 'text', text: request.reason || 'ไม่ระบุ', size: 'sm', color: '#334155', flex: 5, wrap: true }
             ]
           },
+          request.reimbursement_requested !== null && request.reimbursement_requested !== undefined ? {
+            type: 'box',
+            layout: 'horizontal',
+            margin: 'xs',
+            contents: [
+              { type: 'text', text: 'เบิกค่าใช้จ่าย:', size: 'xs', color: '#64748b', flex: 3 },
+              { type: 'text', text: request.reimbursement_requested ? 'ต้องการเบิก' : 'ไม่เบิก', size: 'xs', weight: 'bold', color: request.reimbursement_requested ? '#059669' : '#64748b', flex: 5 }
+            ]
+          } : { type: 'filler' },
+          request.swap_date ? {
+            type: 'box',
+            layout: 'horizontal',
+            margin: 'xs',
+            contents: [
+              { type: 'text', text: 'วันสลับออกตรวจ:', size: 'xs', color: '#64748b', flex: 3 },
+              { type: 'text', text: request.swap_date, size: 'xs', weight: 'bold', color: '#059669', flex: 5 }
+            ]
+          } : { type: 'filler' },
           request.substitute_doctor_name ? {
             type: 'box',
             layout: 'horizontal',
@@ -208,7 +226,23 @@ export function buildDoctorSubmittedFlex(request, doctor, leaveType) {
                 wrap: true
               }
             ]
-          } : { type: 'filler' }
+          } : { type: 'filler' },
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#f8fafc',
+            cornerRadius: '8px',
+            paddingAll: '8px',
+            margin: 'xs',
+            contents: [
+              {
+                type: 'text',
+                text: '🔄 สายอนุมัติ: หัวหน้าแพทย์ >> นพ.ปริวรรธน์ ระเด่น (ผช.ผอ.รพ.)',
+                size: 'xxs',
+                color: '#64748b'
+              }
+            ]
+          }
         ]
       },
       footer: {
@@ -218,10 +252,11 @@ export function buildDoctorSubmittedFlex(request, doctor, leaveType) {
         contents: [
           {
             type: 'text',
-            text: 'ระบบส่งแจ้งเตือนไปยังหัวหน้าแผนกเรียบร้อยแล้ว',
+            text: 'ระบบส่งแจ้งเตือนไปยังหัวหน้าแพทย์เพื่อพิจารณาขั้นที่ 1 เรียบร้อยแล้ว',
             size: 'xs',
-            color: '#94a3b8',
-            align: 'center'
+            color: '#006699',
+            align: 'center',
+            weight: 'bold'
           }
         ]
       }
@@ -230,9 +265,9 @@ export function buildDoctorSubmittedFlex(request, doctor, leaveType) {
 }
 
 /**
- * 2. Flex Message: ส่งถึงหัวหน้าแผนก (1-on-1 Approver Request) มีปุ่ม 1-click Approve
+ * 2. Flex Message: ส่งถึงผู้อนุมัติ (Step 1: หัวหน้าแพทย์ หรือ Step 2: นพ.ปริวรรธน์ ระเด่น) มีปุ่ม 1-click Approve
  */
-export function buildApproverRequestFlex(request, doctor, leaveType, quotaInfo, appUrl) {
+export function buildApproverRequestFlex(request, doctor, leaveType, quotaInfo, appUrl, stepOrder = 1, prevApproverName = '') {
   const periodText = request.half_day_type === 'MORNING' ? ' (ครึ่งวันเช้า)' :
                      request.half_day_type === 'AFTERNOON' ? ' (ครึ่งวันบ่าย)' : ' (เต็มวัน)';
   const dateText = request.start_date === request.end_date
@@ -244,16 +279,21 @@ export function buildApproverRequestFlex(request, doctor, leaveType, quotaInfo, 
     ? `ลาแล้ว ${quotaInfo.current_on_leave}/${quotaInfo.max_allowed} ท่าน ${quotaInfo.is_quota_exceeded ? '(⚠️ เกินโควตา)' : '(ปกติ)'}`
     : 'ปกติ';
 
+  const isStep2 = stepOrder === 2;
+  const headerTitle = request.is_emergency
+    ? (isStep2 ? '🚨 ขออนุมัติลาฉุกเฉิน (ขั้นที่ 2 - ผช.ผอ.รพ.)' : '🚨 ขออนุมัติลาฉุกเฉิน (ขั้นที่ 1 - หัวหน้าแพทย์)')
+    : (isStep2 ? '📋 ขออนุมัติการลา (ขั้นที่ 2 - ผช.ผอ.รพ.)' : '📋 ขออนุมัติการลา (ขั้นที่ 1 - หัวหน้าแพทย์)');
+
   return {
     type: 'flex',
-    altText: `[ขออนุมัติลา] ${doctor.prefix_th}${doctor.first_name_th} ${doctor.last_name_th} (${leaveType.name_th})`,
+    altText: `[ขออนุมัติลา ${isStep2 ? 'ขั้นสุดท้าย' : 'ขั้นที่ 1'}] ${doctor.prefix_th}${doctor.first_name_th} ${doctor.last_name_th} (${leaveType.name_th})`,
     contents: {
       type: 'bubble',
       size: 'mega',
       header: {
         type: 'box',
         layout: 'vertical',
-        backgroundColor: request.is_emergency ? '#dc2626' : '#006699',
+        backgroundColor: request.is_emergency ? '#dc2626' : (isStep2 ? '#1e3a8a' : '#006699'),
         paddingAll: '16px',
         contents: [
           {
@@ -265,7 +305,7 @@ export function buildApproverRequestFlex(request, doctor, leaveType, quotaInfo, 
           },
           {
             type: 'text',
-            text: request.is_emergency ? '🚨 ขออนุมัติลาฉุกเฉิน (ด่วนพิเศษ)' : '📋 มีคำขออนุมัติการลาใหม่',
+            text: headerTitle,
             color: '#ffffff',
             size: 'lg',
             weight: 'bold',
@@ -290,6 +330,14 @@ export function buildApproverRequestFlex(request, doctor, leaveType, quotaInfo, 
             type: 'box',
             layout: 'horizontal',
             contents: [
+              { type: 'text', text: 'แผนก:', size: 'sm', color: '#64748b', flex: 3 },
+              { type: 'text', text: doctor.department_name || 'ไม่ระบุ', size: 'sm', weight: 'bold', color: '#334155', flex: 5 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
               { type: 'text', text: 'ประเภท:', size: 'sm', color: '#64748b', flex: 3 },
               { type: 'text', text: `${leaveType.name_th} (${doctor.doctor_type === 'FULL_TIME' ? 'FT' : 'PT'})`, size: 'sm', weight: 'bold', color: '#006699', flex: 5 }
             ]
@@ -308,6 +356,64 @@ export function buildApproverRequestFlex(request, doctor, leaveType, quotaInfo, 
             contents: [
               { type: 'text', text: 'เหตุผล:', size: 'sm', color: '#64748b', flex: 3 },
               { type: 'text', text: request.reason || 'ไม่ระบุ', size: 'sm', color: '#334155', flex: 5, wrap: true }
+            ]
+          },
+          request.reimbursement_requested !== null && request.reimbursement_requested !== undefined ? {
+            type: 'box',
+            layout: 'horizontal',
+            margin: 'xs',
+            contents: [
+              { type: 'text', text: 'เบิกค่าใช้จ่าย:', size: 'xs', color: '#64748b', flex: 3 },
+              { type: 'text', text: request.reimbursement_requested ? 'ต้องการเบิก' : 'ไม่เบิก', size: 'xs', weight: 'bold', color: request.reimbursement_requested ? '#059669' : '#64748b', flex: 5 }
+            ]
+          } : { type: 'filler' },
+          request.swap_date ? {
+            type: 'box',
+            layout: 'horizontal',
+            margin: 'xs',
+            contents: [
+              { type: 'text', text: 'วันสลับออกตรวจ:', size: 'xs', color: '#64748b', flex: 3 },
+              { type: 'text', text: request.swap_date, size: 'xs', weight: 'bold', color: '#059669', flex: 5 }
+            ]
+          } : { type: 'filler' },
+          isStep2 ? {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#f0fdf4',
+            cornerRadius: '8px',
+            paddingAll: '8px',
+            margin: 'xs',
+            contents: [
+              {
+                type: 'text',
+                text: `✅ ผ่านขั้นที่ 1 โดย: ${prevApproverName || 'หัวหน้าแพทย์ประจำแผนก'}`,
+                size: 'xs',
+                color: '#166534',
+                weight: 'bold'
+              },
+              {
+                type: 'text',
+                text: 'รอการพิจารณาอนุมัติขั้นสุดท้ายจาก นพ.ปริวรรธน์ ระเด่น',
+                size: 'xxs',
+                color: '#15803d',
+                margin: 'xs'
+              }
+            ]
+          } : {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#eff6ff',
+            cornerRadius: '8px',
+            paddingAll: '8px',
+            margin: 'xs',
+            contents: [
+              {
+                type: 'text',
+                text: '📌 ขั้นที่ 1: หัวหน้าแพทย์พิจารณา (อนุมัติแล้วจะส่งต่อ ผช.ผอ.รพ.)',
+                size: 'xs',
+                color: '#1e40af',
+                weight: 'bold'
+              }
             ]
           },
           request.substitute_doctor_name ? {
@@ -359,9 +465,9 @@ export function buildApproverRequestFlex(request, doctor, leaveType, quotaInfo, 
             color: '#059669', // Emerald
             action: {
               type: 'postback',
-              label: '✅ อนุมัติทันที (1-Click)',
-              data: `action=approve&id=${request.id}&reqNo=${request.request_no}`,
-              displayText: `อนุมัติใบลา ${request.request_no}`
+              label: isStep2 ? '✅ อนุมัติขั้นสุดท้าย (1-Click)' : '✅ อนุมัติขั้นที่ 1 (1-Click)',
+              data: `action=approve&id=${request.id}&reqNo=${request.request_no}&step=${stepOrder}`,
+              displayText: isStep2 ? `อนุมัติใบลา ${request.request_no} ขั้นสุดท้าย` : `อนุมัติใบลา ${request.request_no} ขั้นที่ 1`
             }
           },
           {
@@ -475,6 +581,253 @@ export function buildLeaveDecisionFlex(request, doctor, leaveType, action, appro
             size: 'xs',
             color: '#94a3b8',
             align: 'center'
+          }
+        ]
+      }
+    }
+  };
+}
+
+/**
+ * 3.0 Flex Message: แจ้งแพทย์เมื่อหัวหน้าแพทย์อนุมัติขั้นที่ 1 แล้ว (กำลังส่งต่อ นพ.ปริวรรธน์ ระเด่น)
+ */
+export function buildDoctorStep1ApprovedFlex(request, doctor, leaveType, approverName) {
+  const periodText = request.half_day_type === 'MORNING' ? ' (ครึ่งวันเช้า)' :
+                     request.half_day_type === 'AFTERNOON' ? ' (ครึ่งวันบ่าย)' : ' (เต็มวัน)';
+  const dateText = request.start_date === request.end_date
+    ? `${request.start_date}${periodText}`
+    : `${request.start_date} ถึง ${request.end_date} (${request.duration_days} วัน)`;
+
+  return {
+    type: 'flex',
+    altText: `[ผลการพิจารณาขั้นที่ 1] ใบลา ${request.request_no} ผ่านการอนุมัติแล้ว`,
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#0284c7', // Sky Blue
+        paddingAll: '16px',
+        contents: [
+          {
+            type: 'text',
+            text: 'โรงพยาบาลกรุงเทพสิริโรจน์',
+            color: '#e0f2fe',
+            size: 'xs',
+            weight: 'bold'
+          },
+          {
+            type: 'text',
+            text: '✅ ผ่านการอนุมัติขั้นที่ 1 แล้ว',
+            color: '#ffffff',
+            size: 'lg',
+            weight: 'bold',
+            margin: 'xs'
+          }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'เลขที่ใบลา:', size: 'sm', color: '#64748b', flex: 3 },
+              { type: 'text', text: request.request_no, size: 'sm', weight: 'bold', color: '#0f172a', flex: 5 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'ประเภทการลา:', size: 'sm', color: '#64748b', flex: 3 },
+              { type: 'text', text: leaveType.name_th, size: 'sm', weight: 'bold', color: '#006699', flex: 5 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'วันที่ลา:', size: 'sm', color: '#64748b', flex: 3 },
+              { type: 'text', text: dateText, size: 'sm', color: '#0f172a', flex: 5 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'ผู้อนุมัติขั้นที่ 1:', size: 'sm', color: '#64748b', flex: 3 },
+              { type: 'text', text: approverName || 'หัวหน้าแพทย์ประจำแผนก', size: 'sm', weight: 'bold', color: '#0369a1', flex: 5 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#eff6ff',
+            cornerRadius: '8px',
+            paddingAll: '10px',
+            margin: 'sm',
+            contents: [
+              {
+                type: 'text',
+                text: '⏳ อยู่ระหว่างรอการพิจารณาขั้นสุดท้าย (ขั้นที่ 2)',
+                size: 'xs',
+                color: '#1e40af',
+                weight: 'bold'
+              },
+              {
+                type: 'text',
+                text: 'ระบบได้ส่งต่อคำขอไปยัง นพ.ปริวรรธน์ ระเด่น (ผู้ช่วยผู้อำนวยการ รพ.) เพื่อพิจารณาอนุมัติขั้นสุดท้ายแล้ว',
+                size: 'xxs',
+                color: '#3b82f6',
+                margin: 'xs',
+                wrap: true
+              }
+            ]
+          }
+        ]
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          {
+            type: 'text',
+            text: 'ระบบจะส่งข้อความแจ้งเตือนผลการอนุมัติขั้นสุดท้ายให้ท่านทราบทันที',
+            size: 'xs',
+            color: '#94a3b8',
+            align: 'center'
+          }
+        ]
+      }
+    }
+  };
+}
+
+/**
+ * 3.01 Flex Message: แจ้งเตือนพี่กุ้ง ฝ่ายการแพทย์ ให้ทราบทุกขั้นตอน ("พี่ต้องทราบด้วย")
+ */
+export function buildMedicalAdminNotificationFlex(request, doctor, leaveType, eventType, actorName = '', comments = '') {
+  let title = '📌 มีการยื่นขอลาใหม่';
+  let badgeColor = '#0284c7';
+  let subtitle = 'รอหัวหน้าแพทย์พิจารณา (ขั้นที่ 1)';
+
+  if (eventType === 'STEP1_APPROVED') {
+    title = '📌 อนุมัติขั้นที่ 1 แล้ว';
+    badgeColor = '#0d9488';
+    subtitle = `อนุมัติโดย: ${actorName} >> ส่งต่อ นพ.ปริวรรธน์ ระเด่น`;
+  } else if (eventType === 'FINAL_APPROVED') {
+    title = '✅ อนุมัติสมบูรณ์แล้ว';
+    badgeColor = '#059669';
+    subtitle = `อนุมัติขั้นสุดท้ายโดย: นพ.ปริวรรธน์ ระเด่น (ผช.ผอ.รพ.)`;
+  } else if (eventType === 'REJECTED') {
+    title = '❌ ไม่อนุมัติคำขอลา';
+    badgeColor = '#dc2626';
+    subtitle = `ไม่อนุมัติโดย: ${actorName}`;
+  }
+
+  return {
+    type: 'flex',
+    altText: `[ฝ่ายการแพทย์] ${title}: ${doctor.prefix_th}${doctor.first_name_th} (${request.request_no})`,
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: badgeColor,
+        paddingAll: '14px',
+        contents: [
+          {
+            type: 'text',
+            text: 'ฝ่ายการแพทย์ (Medical Affairs)',
+            color: '#ffffff',
+            size: 'xxs',
+            weight: 'bold'
+          },
+          {
+            type: 'text',
+            text: title,
+            color: '#ffffff',
+            size: 'md',
+            weight: 'bold',
+            margin: 'xs'
+          }
+        ]
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'sm',
+        contents: [
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'แพทย์:', size: 'xs', color: '#64748b', flex: 3 },
+              { type: 'text', text: `${doctor.prefix_th}${doctor.first_name_th} ${doctor.last_name_th}`, size: 'xs', weight: 'bold', color: '#0f172a', flex: 5 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'แผนก:', size: 'xs', color: '#64748b', flex: 3 },
+              { type: 'text', text: doctor.department_name || 'ไม่ระบุ', size: 'xs', color: '#334155', flex: 5 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'เลขที่:', size: 'xs', color: '#64748b', flex: 3 },
+              { type: 'text', text: request.request_no, size: 'xs', weight: 'bold', color: '#006699', flex: 5 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'ประเภท:', size: 'xs', color: '#64748b', flex: 3 },
+              { type: 'text', text: `${leaveType.name_th} (${request.duration_days} วัน)`, size: 'xs', color: '#0f172a', flex: 5 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'horizontal',
+            contents: [
+              { type: 'text', text: 'ช่วงวันที่:', size: 'xs', color: '#64748b', flex: 3 },
+              { type: 'text', text: `${request.start_date} ถึง ${request.end_date}`, size: 'xs', color: '#0f172a', flex: 5 }
+            ]
+          },
+          {
+            type: 'box',
+            layout: 'vertical',
+            backgroundColor: '#f8fafc',
+            cornerRadius: '6px',
+            paddingAll: '8px',
+            margin: 'xs',
+            contents: [
+              {
+                type: 'text',
+                text: subtitle,
+                size: 'xxs',
+                color: '#475569',
+                wrap: true
+              },
+              comments ? {
+                type: 'text',
+                text: `หมายเหตุ: ${comments}`,
+                size: 'xxs',
+                color: '#dc2626',
+                margin: 'xs',
+                wrap: true
+              } : { type: 'filler' }
+            ]
           }
         ]
       }

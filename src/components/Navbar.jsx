@@ -67,9 +67,8 @@ export default function Navbar() {
   // Sub-items for Master Data Dropdown
   const masterDataItems = [
     { to: '/admin/criteria', label: 'เกณฑ์โควตาแผนก', desc: 'กำหนดจำนวนแพทย์ที่ลาได้พร้อมกัน', icon: Sliders },
-    { to: '/admin/master-data', label: 'สายอนุมัติ & ประเภทการลา', desc: 'จัดการ Approver และเงื่อนไขการลา', icon: GitMerge },
-    { to: '/admin/tenure', label: 'คำนวณอายุงาน & สิทธิ์', desc: 'Vacation Tiers & Prorating', icon: Award },
-    { to: '/admin/holidays', label: 'ปฏิทินวันหยุด รพ.', desc: 'วันหยุดนักขัตฤกษ์ 19 วัน', icon: CalendarDays },
+    { to: '/admin/master-data', label: 'สายอนุมัติ & ประเภทการลา', desc: 'จัดการ Approver และเงื่อนไขการลาทั้ง 8 ประเภท', icon: GitMerge },
+    { to: '/admin/tenure', label: 'เกณฑ์ลาพักร้อน 20 วัน & อายุงาน', desc: 'หลังครบ 6 เดือน (FT) • คำนวณตามปฏิทิน', icon: Award },
   ];
 
   const isMasterDataActive = masterDataItems.some(item => location.pathname === item.to);
