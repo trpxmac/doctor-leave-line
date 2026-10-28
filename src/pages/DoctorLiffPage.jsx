@@ -207,6 +207,7 @@ export default function DoctorLiffPage() {
   const [files, setFiles] = useState([]);
   const [reimbursementRequested, setReimbursementRequested] = useState(false);
   const [swapDate, setSwapDate] = useState('');
+  const [showAllSwapDays, setShowAllSwapDays] = useState(false);
 
   // Shift Conflict & Duty Handover State (Feature #26)
   const [shiftConflict, setShiftConflict] = useState(null);
@@ -215,6 +216,7 @@ export default function DoctorLiffPage() {
 
   // Quota Status & Duration Preview
   const [quotaInfo, setQuotaInfo] = useState(null);
+  const [swapQuotaInfo, setSwapQuotaInfo] = useState(null);
   const [durationPreview, setDurationPreview] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [successResult, setSuccessResult] = useState(null);
@@ -251,6 +253,13 @@ export default function DoctorLiffPage() {
     if (selectedType) {
       if (!selectedType.allows_half_day && halfDayType !== 'FULL_DAY') {
         setHalfDayType('FULL_DAY');
+      }
+      if (selectedType.code === 'SHIFT_SWAP') {
+        setLeaveMode('SINGLE');
+        const nextDay = addDaysToDate(startDate, 1);
+        if (!swapDate || swapDate === startDate) {
+          setSwapDate(nextDay);
+        }
       }
       if (selectedType.min_notice_days > 0) {
         const minValidDate = addDaysToDate(todayStr, selectedType.min_notice_days);
@@ -299,6 +308,26 @@ export default function DoctorLiffPage() {
     };
     checkQuota();
   }, [currentDoctor, startDate]);
+
+  // Check Department Availability on Swap Date (for SHIFT_SWAP)
+  useEffect(() => {
+    if (!currentDoctor || !swapDate) {
+      setSwapQuotaInfo(null);
+      return;
+    }
+    const checkSwapQuota = async () => {
+      try {
+        const res = await fetch(`/api/quota-check?departmentId=${currentDoctor.department_id}&date=${swapDate}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSwapQuotaInfo(data);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    checkSwapQuota();
+  }, [currentDoctor, swapDate]);
 
   // Live Calculate Duration (with Working Days & Holidays check)
   useEffect(() => {
@@ -559,47 +588,47 @@ export default function DoctorLiffPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-sky-50/50 to-slate-200 py-4 px-3 sm:px-6 max-w-xl mx-auto flex flex-col justify-center">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-sky-50/50 to-slate-200 py-4 px-2.5 sm:px-6 max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex flex-col justify-center">
 
-      {/* Mobile LIFF Container Card */}
-      <div className="bg-white/80 backdrop-blur-xl rounded-[24px] shadow-2xl overflow-hidden border border-white shadow-sky-900/10 transition-all duration-500 hover:shadow-sky-900/20">
+      {/* Mobile & Desktop LIFF Container Card */}
+      <div className="bg-white/85 backdrop-blur-xl rounded-[24px] shadow-2xl overflow-hidden border border-white shadow-sky-900/10 transition-all duration-500 hover:shadow-sky-900/20">
 
         {/* Hospital Brand Header */}
-        <div className="bg-gradient-to-r from-[#006699] via-[#0284c7] to-[#008b8b] text-white p-5 relative overflow-hidden">
+        <div className="bg-gradient-to-r from-[#006699] via-[#0284c7] to-[#008b8b] text-white p-4 sm:p-5 relative overflow-hidden">
           {/* Decorative shapes */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10 animate-pulse-subtle"></div>
           <div className="absolute bottom-0 left-0 w-24 h-24 bg-sky-300/20 rounded-full blur-xl -ml-10 -mb-10"></div>
 
-          <div className="flex items-center justify-between relative z-10">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
-                <FileText className="w-6 h-6 text-white" />
+          <div className="flex items-start sm:items-center justify-between gap-2 relative z-10">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 shrink-0">
+                <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
-              <div>
-                <span className="text-[11px] font-semibold text-sky-200 uppercase tracking-wider block">
+              <div className="min-w-0">
+                <span className="text-[10px] sm:text-[11px] font-semibold text-sky-200 uppercase tracking-wider block truncate">
                   LINE Official Account • LIFF
                 </span>
-                <h1 className="text-lg font-bold leading-tight">
+                <h1 className="text-base sm:text-lg font-bold leading-tight truncate">
                   แบบฟอร์มยื่นใบลาแพทย์
                 </h1>
               </div>
             </div>
-            <div className="text-right">
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/20 text-white backdrop-blur-xs">
-                {currentDoctor.doctor_type === 'FULL_TIME' ? 'แพทย์ประจำ (FT)' : 'แพทย์พาร์ทไทม์ (PT)'}
+            <div className="text-right shrink-0">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/20 text-white backdrop-blur-xs whitespace-nowrap">
+                {currentDoctor.doctor_type === 'FULL_TIME' ? 'แพทย์ประจำ (FT)' : 'พาร์ทไทม์ (PT)'}
               </span>
             </div>
           </div>
 
           {/* Smart Profile Info Bar */}
-          <div className="mt-3 pt-3 border-t border-white/15 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold">{currentDoctor.prefix_th}{currentDoctor.first_name_th} {currentDoctor.last_name_th}</span>
+          <div className="mt-3 pt-2.5 border-t border-white/15 flex flex-wrap items-center justify-between gap-1.5 text-xs">
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
+              <span className="font-semibold truncate">{currentDoctor.prefix_th}{currentDoctor.first_name_th} {currentDoctor.last_name_th}</span>
               <span className="text-sky-200 text-[11px] font-mono">
                 ({currentDoctor.employee_id}{currentDoctor.license_no ? ` • ${currentDoctor.license_no}` : ''})
               </span>
             </div>
-            <span className="text-sky-200 bg-sky-950/30 px-2 py-0.5 rounded text-[11px]">
+            <span className="text-sky-100 bg-sky-950/35 px-2 py-0.5 rounded-md text-[11px] font-medium shrink-0">
               แผนก{currentDoctor.department_name || 'อายุรกรรม'}
             </span>
           </div>
@@ -608,7 +637,7 @@ export default function DoctorLiffPage() {
 
 
         {/* Leave Request Form */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form onSubmit={handleSubmit} className="p-3.5 sm:p-5 space-y-4">
 
           {/* Error Message */}
           {errorMessage && (
@@ -620,10 +649,10 @@ export default function DoctorLiffPage() {
 
           {/* 1. เลือกประเภทการลา */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            <label className="block text-xs font-bold text-slate-700 mb-2">
               1. เลือกประเภทการลา <span className="text-rose-500">*</span>
             </label>
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5">
               {leaveTypes.map(lt => {
                 const isSelected = selectedType?.id === lt.id;
                 const bal = balances.find(b => b.leave_type_id === lt.id);
@@ -638,63 +667,59 @@ export default function DoctorLiffPage() {
                     type="button"
                     key={lt.id}
                     onClick={() => setSelectedType(lt)}
-                    className={`p-3 rounded-2xl border text-left transition-all duration-300 relative flex flex-col justify-between overflow-hidden group ${isSelected
+                    className={`p-2.5 sm:p-3 rounded-2xl border text-left transition-all duration-200 relative flex flex-col justify-between min-h-[78px] overflow-hidden group ${isSelected
                         ? isFull
                           ? 'border-rose-400 bg-gradient-to-br from-rose-50 to-white shadow-md ring-1 ring-rose-400'
                           : 'border-[#006699] bg-gradient-to-br from-sky-50 to-white shadow-md shadow-sky-900/10 ring-1 ring-[#006699]'
                         : isFull
                           ? 'border-rose-200/90 bg-rose-50/30 hover:border-rose-300'
-                          : 'border-slate-200 hover:border-sky-300 hover:shadow-sm hover:-translate-y-0.5 bg-white'
+                          : 'border-slate-200 hover:border-sky-300 hover:shadow-sm bg-white'
                       }`}
                   >
                     {isSelected && (
-                      <div className={`absolute top-0 right-0 w-12 h-12 rounded-bl-full -mr-2 -mt-2 ${isFull ? 'bg-rose-200/40' : 'bg-sky-200/30'}`} />
+                      <div className={`absolute top-0 right-0 w-10 h-10 rounded-bl-full -mr-2 -mt-2 ${isFull ? 'bg-rose-200/40' : 'bg-sky-200/30'}`} />
                     )}
-                    <div className="flex items-center justify-between relative z-10">
-                      <span className="text-xs font-bold text-slate-800">{lt.name_th}</span>
-                      <div className="flex items-center gap-1.5">
-                        {isFull && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
-                            {isTrainingType ? 'ใช้สิทธิ์แล้ว' : 'โควตาเต็ม'}
-                          </span>
-                        )}
-                        <span
-                          className="w-2.5 h-2.5 rounded-full shrink-0"
-                          style={{ backgroundColor: isFull ? '#ef4444' : (lt.color || '#0ea5e9') }}
-                        />
-                      </div>
+                    <div className="flex items-start justify-between gap-1.5 relative z-10">
+                      <span className="text-[11px] sm:text-xs font-bold text-slate-800 leading-snug line-clamp-2">
+                        {lt.name_th}
+                      </span>
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0 mt-0.5"
+                        style={{ backgroundColor: isFull ? '#ef4444' : (lt.color || '#0ea5e9') }}
+                      />
                     </div>
-                    <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between gap-1 flex-wrap">
-                      <span>{lt.allows_half_day ? 'ลาครึ่งวันได้' : 'เต็มวันเท่านั้น'}</span>
+                    <div className="text-[10px] text-slate-500 mt-2 pt-1.5 border-t border-slate-100/80 flex items-center justify-between gap-1 relative z-10">
+                      <span className="truncate text-[9px] sm:text-[10px] text-slate-400">
+                        {lt.allows_half_day ? 'ครึ่งวันได้' : 'เต็มวัน'}
+                      </span>
                       {isTrainingType ? (
-                        <span className={`font-semibold px-1.5 py-0.5 rounded text-[10px] ${
+                        <span className={`font-semibold px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] shrink-0 ${
                           isFull
-                            ? 'text-rose-700 bg-rose-50 border border-rose-200 font-bold'
+                            ? 'text-rose-700 bg-rose-100 border border-rose-200 font-bold'
                             : 'text-violet-700 bg-violet-50 border border-violet-200'
                         }`}>
-                          {isFull ? `ใช้ครบ ${trainingUsedCount}/${trainingMaxCount} ครั้ง` : `1 ครั้ง/ปี`}
+                          {isFull ? 'ใช้สิทธิ์แล้ว' : '1 ครั้ง/ปี'}
                         </span>
                       ) : hasQuota ? (
                         isSelected && activeDuration > 0 ? (
-                          <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[10px] flex items-center gap-1">
-                            <span className="text-slate-400 line-through text-[9px]">{bal.remaining_days}</span>
+                          <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[9px] sm:text-[10px] flex items-center gap-0.5 shrink-0">
                             <span>เหลือ {Math.max(0, Number(bal.remaining_days) - activeDuration)} วัน</span>
                             <span className="text-rose-600 font-extrabold text-[9px]">(-{activeDuration})</span>
                           </span>
                         ) : (
-                          <span className={`font-semibold ${isFull ? 'text-rose-600 font-bold' : 'text-[#006699]'}`}>
-                            เหลือ {bal.remaining_days} วัน
+                          <span className={`font-semibold shrink-0 text-[10px] ${isFull ? 'text-rose-600 font-bold' : 'text-[#006699]'}`}>
+                            {isFull ? 'โควตาเต็ม' : `เหลือ ${bal.remaining_days} วัน`}
                           </span>
                         )
                       ) : (
-                        <span className={`font-semibold px-2 py-0.5 rounded text-[10px] ${
+                        <span className={`font-semibold px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] shrink-0 ${
                           lt.code === 'UNPAID'
                             ? 'text-slate-600 bg-slate-100 border border-slate-200/80'
                             : lt.code === 'SHIFT_SWAP'
                               ? 'text-emerald-700 bg-emerald-50 border border-emerald-200/80'
                               : 'text-amber-700 bg-amber-50 border border-amber-200/60'
                         }`}>
-                          {lt.code === 'UNPAID' ? 'สูงสุด 1 เดือน' : lt.code === 'SHIFT_SWAP' ? 'สลับวันตรวจ' : 'ตามเกณฑ์ รพ.'}
+                          {lt.code === 'UNPAID' ? 'ไม่เกิน 30 วัน' : lt.code === 'SHIFT_SWAP' ? 'สลับวันตรวจ' : 'ตามเกณฑ์ รพ.'}
                         </span>
                       )}
                     </div>
@@ -748,7 +773,7 @@ export default function DoctorLiffPage() {
                     )}
                     {selectedType.code === 'SHIFT_SWAP' && (
                       <ul className="text-[11px] text-slate-600 list-disc list-inside space-y-0.5">
-                        <li>สำหรับขอสลับวันออกตรวจ กรุณาระบุวันที่ต้องการสลับออกตรวจด้านล่าง</li>
+                        <li>สำหรับขอหยุดแบบสลับวันออกตรวจ (เลือกวันที่ขอหยุดในข้อ 2 แล้วเลือกวันที่จะสลับไปออกตรวจแทนด้านล่าง)</li>
                       </ul>
                     )}
                     {selectedType.code === 'SICK' && (
@@ -776,61 +801,26 @@ export default function DoctorLiffPage() {
                       <button
                         type="button"
                         onClick={() => setReimbursementRequested(true)}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all ${
+                        className={`py-2 px-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all ${
                           reimbursementRequested === true
                             ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                             : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300'
                         }`}
                       >
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        <span>เบิก (ต้องการเบิกค่าใช้จ่าย)</span>
+                        <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>เบิกค่าใช้จ่าย</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setReimbursementRequested(false)}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all ${
+                        className={`py-2 px-2.5 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all ${
                           reimbursementRequested === false
                             ? 'bg-slate-700 text-white border-slate-700 shadow-xs'
                             : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
                         }`}
                       >
-                        <span>ไม่เบิก (ไม่เบิกค่าใช้จ่าย)</span>
+                        <span>ไม่เบิกค่าใช้จ่าย</span>
                       </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Shift Swap Date Input for SHIFT_SWAP (ลาสลับวันออกตรวจ) */}
-                {selectedType.code === 'SHIFT_SWAP' && (
-                  <div className="pt-2 border-t border-sky-200/80 space-y-2">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-800 mb-1">
-                        วันที่ต้องการสลับไปออกตรวจแทน <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        value={swapDate}
-                        onChange={(e) => setSwapDate(e.target.value)}
-                        className="w-full text-xs p-2 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden font-medium text-slate-800"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-800 mb-1">
-                        แพทย์ที่สลับวันออกตรวจด้วย (ถ้ามี)
-                      </label>
-                      <select
-                        value={substituteDoctorId}
-                        onChange={(e) => setSubstituteDoctorId(e.target.value)}
-                        className="w-full text-xs font-medium border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-[#006699] outline-hidden"
-                      >
-                        <option value="">-- เลือกแพทย์ที่สลับวันออกตรวจในแผนก (ถ้ามี) --</option>
-                        {departmentColleagues.map((colleague) => (
-                          <option key={colleague.id} value={colleague.id}>
-                            {colleague.prefix_th}{colleague.first_name_th} {colleague.last_name_th}
-                          </option>
-                        ))}
-                      </select>
                     </div>
                   </div>
                 )}
@@ -881,210 +871,403 @@ export default function DoctorLiffPage() {
 
           {/* 2. เลือกช่วงเวลา & วันที่ */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="block text-xs font-bold text-slate-700">
-                2. วันที่ต้องการลา <span className="text-rose-500">*</span>
-              </label>
+            {selectedType?.code === 'SHIFT_SWAP' ? (
+              /* ============================================================ */
+              /* FRIENDLY SIDE-BY-SIDE CARD FOR SHIFT SWAP (ลาสลับวันออกตรวจ)  */
+              /* ============================================================ */
+              <div className="space-y-3 animate-in fade-in">
+                <label className="block text-xs font-bold text-slate-700">
+                  2. เลือกวันหยุดเดิม และวันที่จะสลับไปออกตรวจแทน <span className="text-rose-500">*</span>
+                </label>
 
-              {/* Leave Mode Switcher */}
-              <div className="inline-flex p-1 rounded-xl bg-slate-100 border border-slate-200 shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLeaveMode('SINGLE');
-                    setEndDate(startDate);
-                  }}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                    leaveMode === 'SINGLE'
-                      ? 'bg-white text-[#006699] shadow-xs font-bold'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <Calendar className="w-3.5 h-3.5" />
-                  <span>ลาวันเดียว</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLeaveMode('RANGE');
-                    setHalfDayType('FULL_DAY');
-                    if (endDate === startDate) {
-                      setEndDate(addDaysToDate(startDate, 1));
-                    }
-                  }}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                    leaveMode === 'RANGE'
-                      ? 'bg-white text-[#006699] shadow-xs font-bold'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <CalendarRange className="w-3.5 h-3.5" />
-                  <span>ลาหลายวัน (ช่วงวันที่)</span>
-                </button>
-              </div>
-            </div>
+                {/* Step A (วันขอหยุด) ➔ Step B (วันสลับไปออกตรวจแทน) */}
+                <div className="grid grid-cols-1 md:grid-cols-11 gap-2.5 items-stretch">
+                  {/* Left Box: วันที่ขอหยุดตรวจ */}
+                  <div className="md:col-span-5 p-3.5 bg-amber-50/50 rounded-2xl border border-amber-200 space-y-2 flex flex-col justify-between">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-amber-500 text-white text-[11px] font-bold inline-flex items-center justify-center">1</span>
+                          วันที่ขอหยุดออกตรวจ <span className="text-rose-500">*</span>
+                        </span>
+                        <span className="text-[11px] font-bold text-amber-800 bg-white px-2 py-0.5 rounded-full border border-amber-200">
+                          {formatThaiDateShort(startDate)}
+                        </span>
+                      </div>
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setStartDate(val);
+                          setEndDate(val);
+                        }}
+                        className="w-full text-xs p-2.5 rounded-xl border border-amber-300 bg-white focus:ring-2 focus:ring-amber-500 focus:outline-hidden font-semibold text-slate-800"
+                        required
+                      />
+                    </div>
+                    {quotaInfo && (
+                      <div className="text-[11px] text-amber-900 bg-white/90 px-2.5 py-1.5 rounded-lg border border-amber-200/80 flex items-center justify-between">
+                        <span>แพทย์ในแผนกวันนั้น:</span>
+                        <strong className="text-amber-950">เหลือ {quotaInfo.remaining_doctors_count ?? 0} / {quotaInfo.total_doctors ?? 0} ท่าน</strong>
+                      </div>
+                    )}
+                  </div>
 
-            {/* Mode: SINGLE DAY (ลาวันเดียว) */}
-            {leaveMode === 'SINGLE' ? (
-              <div className="p-3.5 bg-gradient-to-br from-white via-sky-50/20 to-sky-50/50 rounded-2xl border border-sky-200/80 shadow-2xs space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                    <Calendar className="w-4 h-4 text-[#006699]" />
-                    วันที่ระบุลา
-                  </span>
-                  <span className="text-xs font-bold text-[#006699] bg-white px-2.5 py-0.5 rounded-full border border-sky-200 shadow-2xs">
-                    {formatThaiDate(startDate, true)}
-                  </span>
+                  {/* Arrow Connector */}
+                  <div className="md:col-span-1 flex items-center justify-center py-0.5">
+                    <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shadow-2xs">
+                      <ArrowRight className="w-4 h-4" />
+                    </div>
+                  </div>
+
+                  {/* Right Box: วันที่จะสลับไปออกตรวจแทน */}
+                  <div className="md:col-span-5 p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-300 space-y-2 flex flex-col justify-between">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-bold inline-flex items-center justify-center">2</span>
+                          สลับไปออกตรวจวันที่ <span className="text-rose-500">*</span>
+                        </span>
+                        {swapDate && (
+                          <span className="text-[11px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-full border border-emerald-200">
+                            {formatThaiDateShort(swapDate)}
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="date"
+                        value={swapDate}
+                        onChange={(e) => setSwapDate(e.target.value)}
+                        className="w-full text-xs p-2.5 rounded-xl border border-emerald-400 bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-semibold text-slate-800"
+                        required
+                      />
+                    </div>
+                    {swapDate && swapQuotaInfo ? (
+                      <div className="text-[11px] text-emerald-900 bg-white/95 px-2.5 py-1.5 rounded-lg border border-emerald-200 flex items-center justify-between">
+                        <span>แพทย์ออกตรวจวันนั้น:</span>
+                        <strong className="text-emerald-700">เหลือ {swapQuotaInfo.remaining_doctors_count ?? 0} / {swapQuotaInfo.total_doctors ?? 0} ท่าน</strong>
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-emerald-700 px-1">
+                        คลิกเลือกวันจากตารางด้านล่างได้เลย
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="relative">
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setStartDate(val);
-                      setEndDate(val);
-                    }}
-                    className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden transition-all font-medium text-slate-800"
-                    required
-                  />
-                </div>
-                {/* Quick single day shortcuts */}
-                <div className="flex items-center gap-1.5 pt-0.5">
-                  <span className="text-[11px] text-slate-400">เลือกเร็ว:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStartDate(todayStr);
-                      setEndDate(todayStr);
-                    }}
-                    className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 hover:border-sky-300 hover:bg-sky-50 text-slate-700 transition-colors"
+
+                {/* Quick Day Picker Strip showing Remaining Doctors per day */}
+                {quotaInfo?.upcoming_days && quotaInfo.upcoming_days.length > 0 && (
+                  <div className="p-3 bg-white rounded-2xl border border-slate-200 space-y-2 shadow-2xs">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-xs font-bold text-slate-700">
+                        📅 เช็คจำนวนแพทย์ออกตรวจคงเหลือในแผนก{quotaInfo.department_name} (แตะเพื่อเลือกวันสลับตรวจ)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowAllSwapDays(!showAllSwapDays)}
+                        className="text-[11px] font-bold text-[#006699] hover:underline cursor-pointer"
+                      >
+                        {showAllSwapDays ? 'แสดง 7 วัน' : 'ดูเพิ่ม 14 วัน →'}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1.5">
+                      {quotaInfo.upcoming_days.slice(0, showAllSwapDays ? 14 : 7).map((day) => {
+                        const isPickedSwap = swapDate === day.date;
+                        const isRequestedOff = day.date === startDate;
+                        const rem = day.remaining_doctors_count ?? 0;
+                        const tot = day.total_doctors ?? 0;
+
+                        return (
+                          <button
+                            type="button"
+                            key={day.date}
+                            onClick={() => setSwapDate(day.date)}
+                            className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center justify-between gap-1 cursor-pointer ${
+                              isPickedSwap
+                                ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-200 shadow-xs'
+                                : isRequestedOff
+                                ? 'bg-amber-50 border-amber-300 text-amber-900'
+                                : 'bg-slate-50/70 border-slate-200 hover:border-emerald-400 hover:bg-white text-slate-800'
+                            }`}
+                          >
+                            <div className={`text-[11px] font-bold whitespace-nowrap ${isPickedSwap ? 'text-white' : 'text-slate-800'}`}>
+                              {formatThaiDateShort(day.date)}
+                            </div>
+
+                            <div className={`w-full py-0.5 px-1 rounded text-[11px] font-extrabold whitespace-nowrap ${
+                              isPickedSwap
+                                ? 'bg-white text-emerald-700'
+                                : rem === tot
+                                ? 'bg-emerald-100/80 text-emerald-800'
+                                : rem <= 1
+                                ? 'bg-rose-100 text-rose-700'
+                                : 'bg-sky-100 text-[#006699]'
+                            }`}>
+                              เหลือ {rem}/{tot} ท่าน
+                            </div>
+
+                            <div className="text-[10px] font-medium whitespace-nowrap">
+                              {isPickedSwap ? (
+                                <span className="text-white font-bold">✓ วันสลับตรวจ</span>
+                              ) : isRequestedOff ? (
+                                <span className="text-amber-700 font-bold">วันขอหยุด</span>
+                              ) : day.current_on_leave > 0 ? (
+                                <span className="text-rose-600">ลา {day.current_on_leave} ท่าน</span>
+                              ) : (
+                                <span className="text-slate-500">อยู่ครบ</span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Show doctors on duty on the selected swap date */}
+                    {swapDate && swapQuotaInfo?.available_doctors?.length > 0 && (
+                      <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap text-[11px] text-slate-600">
+                        <div>
+                          แพทย์ที่ออกตรวจวัน{formatThaiDateShort(swapDate)}:{' '}
+                          <strong className="text-slate-800">
+                            {swapQuotaInfo.available_doctors.map(d => d.short_name).join(', ')}
+                          </strong>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Optional: Colleague to swap with */}
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <label className="text-xs font-bold text-slate-700 shrink-0">
+                    แพทย์ที่สลับวันออกตรวจด้วย (ถ้ามี):
+                  </label>
+                  <select
+                    value={substituteDoctorId}
+                    onChange={(e) => setSubstituteDoctorId(e.target.value)}
+                    className="w-full sm:w-72 text-xs font-medium border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-hidden"
                   >
-                    วันนี้
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const tomorrow = addDaysToDate(todayStr, 1);
-                      setStartDate(tomorrow);
-                      setEndDate(tomorrow);
-                    }}
-                    className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 hover:border-sky-300 hover:bg-sky-50 text-slate-700 transition-colors"
-                  >
-                    พรุ่งนี้
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextWeek = addDaysToDate(todayStr, 7);
-                      setStartDate(nextWeek);
-                      setEndDate(nextWeek);
-                    }}
-                    className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 hover:border-sky-300 hover:bg-sky-50 text-slate-700 transition-colors"
-                  >
-                    สัปดาห์หน้า
-                  </button>
+                    <option value="">-- ไม่ระบุ / สลับตารางตรวจของตนเอง --</option>
+                    {departmentColleagues.map((colleague) => (
+                      <option key={colleague.id} value={colleague.id}>
+                        {colleague.prefix_th}{colleague.first_name_th} {colleague.last_name_th}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             ) : (
-              /* Mode: DATE RANGE (ช่วงวันที่ - Dual Connected Cards) */
-              <div className="p-3.5 bg-gradient-to-br from-white via-sky-50/30 to-blue-50/40 rounded-2xl border border-sky-300/80 shadow-2xs space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-11 gap-2.5 items-center">
-                  {/* Left: Start Date */}
-                  <div className="sm:col-span-5 p-3 bg-white rounded-xl border border-slate-200 hover:border-sky-300 transition-all space-y-1 shadow-2xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5 text-[#006699]" />
-                        วันแรกที่ลา (เริ่มต้น)
-                      </span>
-                      <span className="text-[10px] font-bold text-[#006699] bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200">
-                        {formatThaiDateShort(startDate)}
-                      </span>
-                    </div>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => {
-                        const newStart = e.target.value;
-                        setStartDate(newStart);
-                        if (newStart > endDate) setEndDate(newStart);
+              /* ============================================================ */
+              /* STANDARD LEAVE DATE PICKER (สำหรับประเภทการลาอื่นๆ)             */
+              /* ============================================================ */
+              <>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <label className="block text-xs font-bold text-slate-700">
+                    2. วันที่ต้องการลา <span className="text-rose-500">*</span>
+                  </label>
+
+                  {/* Leave Mode Switcher */}
+                  <div className="grid grid-cols-2 sm:inline-flex p-1 rounded-xl bg-slate-100 border border-slate-200 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLeaveMode('SINGLE');
+                        setEndDate(startDate);
                       }}
-                      className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden transition-all font-medium text-slate-800"
-                      required
-                    />
+                      className={`px-3 py-1.5 sm:py-1 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                        leaveMode === 'SINGLE'
+                          ? 'bg-white text-[#006699] shadow-xs font-bold'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <Calendar className="w-3.5 h-3.5 shrink-0" />
+                      <span>ลาวันเดียว</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLeaveMode('RANGE');
+                        setHalfDayType('FULL_DAY');
+                        if (endDate === startDate) {
+                          setEndDate(addDaysToDate(startDate, 1));
+                        }
+                      }}
+                      className={`px-3 py-1.5 sm:py-1 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                        leaveMode === 'RANGE'
+                          ? 'bg-white text-[#006699] shadow-xs font-bold'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <CalendarRange className="w-3.5 h-3.5 shrink-0" />
+                      <span>ลาหลายวัน (ช่วงวันที่)</span>
+                    </button>
                   </div>
+                </div>
 
-                  {/* Center: Range Duration Connector */}
-                  <div className="sm:col-span-1 flex flex-col items-center justify-center py-1 sm:py-0">
-                    <div className="hidden sm:flex flex-col items-center gap-1">
-                      <div className="w-6 h-6 rounded-full bg-sky-100 flex items-center justify-center text-[#006699] shadow-2xs">
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="text-[10px] font-bold text-[#006699] whitespace-nowrap bg-white px-2 py-0.5 rounded-full border border-sky-200 shadow-2xs">
-                        {activeDuration} วัน
-                      </span>
-                    </div>
-                    <div className="flex sm:hidden items-center justify-center gap-2 py-0.5 w-full">
-                      <div className="h-px bg-sky-200 flex-1" />
-                      <span className="text-[11px] font-bold text-[#006699] flex items-center gap-1 bg-white px-2.5 py-0.5 rounded-full border border-sky-200 shadow-2xs">
-                        <ArrowRight className="w-3 h-3 text-[#006699]" />
-                        {activeDuration} วันทำการ
-                      </span>
-                      <div className="h-px bg-sky-200 flex-1" />
-                    </div>
-                  </div>
-
-                  {/* Right: End Date */}
-                  <div className="sm:col-span-5 p-3 bg-white rounded-xl border border-slate-200 hover:border-sky-300 transition-all space-y-1 shadow-2xs">
+                {/* Mode: SINGLE DAY (ลาวันเดียว) */}
+                {leaveMode === 'SINGLE' ? (
+                  <div className="p-3.5 bg-gradient-to-br from-white via-sky-50/20 to-sky-50/50 rounded-2xl border border-sky-200/80 shadow-2xs space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
-                        <CalendarCheck className="w-3.5 h-3.5 text-emerald-600" />
-                        วันสุดท้ายที่ลา (สิ้นสุด)
+                      <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <Calendar className="w-4 h-4 text-[#006699]" />
+                        วันที่ระบุลา
                       </span>
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                        {formatThaiDateShort(endDate)}
+                      <span className="text-xs font-bold text-[#006699] bg-white px-2.5 py-0.5 rounded-full border border-sky-200 shadow-2xs">
+                        {formatThaiDate(startDate, true)}
                       </span>
                     </div>
-                    <input
-                      type="date"
-                      value={endDate}
-                      min={startDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden transition-all font-medium text-slate-800"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Quick Range Presets & Return to Work Info */}
-                <div className="flex items-center justify-between gap-2 flex-wrap pt-0.5">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[11px] text-slate-400">เลือกช่วงเร็ว:</span>
-                    {[
-                      { label: '2 วัน', days: 1 },
-                      { label: '3 วัน', days: 2 },
-                      { label: '4 วัน', days: 3 },
-                      { label: '5 วัน (1 สัปดาห์)', days: 4 },
-                    ].map(p => (
+                    <div className="relative">
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setStartDate(val);
+                          setEndDate(val);
+                        }}
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden transition-all font-medium text-slate-800"
+                        required
+                      />
+                    </div>
+                    {/* Quick single day shortcuts */}
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      <span className="text-[11px] text-slate-400">เลือกเร็ว:</span>
                       <button
-                        key={p.label}
                         type="button"
-                        onClick={() => setEndDate(addDaysToDate(startDate, p.days))}
-                        className="text-[11px] px-2.5 py-0.5 rounded-md bg-white border border-slate-200 hover:border-sky-300 hover:bg-sky-50 text-slate-700 transition-colors shadow-2xs font-medium"
+                        onClick={() => {
+                          setStartDate(todayStr);
+                          setEndDate(todayStr);
+                        }}
+                        className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 hover:border-sky-300 hover:bg-sky-50 text-slate-700 transition-colors"
                       >
-                        {p.label}
+                        วันนี้
                       </button>
-                    ))}
-                  </div>
-
-                  {returnToWorkDate && (
-                    <div className="text-[11px] text-slate-600 bg-white/90 px-2.5 py-1 rounded-lg border border-sky-100 flex items-center gap-1.5 shadow-2xs">
-                      <Clock className="w-3.5 h-3.5 text-[#006699]" />
-                      <span>กลับมาปฏิบัติงาน: <strong className="text-slate-800">{formatThaiDate(returnToWorkDate, false)}</strong></span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const tomorrow = addDaysToDate(todayStr, 1);
+                          setStartDate(tomorrow);
+                          setEndDate(tomorrow);
+                        }}
+                        className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 hover:border-sky-300 hover:bg-sky-50 text-slate-700 transition-colors"
+                      >
+                        พรุ่งนี้
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextWeek = addDaysToDate(todayStr, 7);
+                          setStartDate(nextWeek);
+                          setEndDate(nextWeek);
+                        }}
+                        className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 hover:border-sky-300 hover:bg-sky-50 text-slate-700 transition-colors"
+                      >
+                        สัปดาห์หน้า
+                      </button>
                     </div>
-                  )}
-                </div>
-              </div>
+                  </div>
+                ) : (
+                  /* Mode: DATE RANGE (ช่วงวันที่ - Dual Connected Cards) */
+                  <div className="p-3.5 bg-gradient-to-br from-white via-sky-50/30 to-blue-50/40 rounded-2xl border border-sky-300/80 shadow-2xs space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-11 gap-2.5 items-center">
+                      {/* Left: Start Date */}
+                      <div className="sm:col-span-5 p-3 bg-white rounded-xl border border-slate-200 hover:border-sky-300 transition-all space-y-1 shadow-2xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-[#006699]" />
+                            วันแรกที่ลา (เริ่มต้น)
+                          </span>
+                          <span className="text-[10px] font-bold text-[#006699] bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200">
+                            {formatThaiDateShort(startDate)}
+                          </span>
+                        </div>
+                        <input
+                          type="date"
+                          value={startDate}
+                          onChange={(e) => {
+                            const newStart = e.target.value;
+                            setStartDate(newStart);
+                            if (newStart > endDate) setEndDate(newStart);
+                          }}
+                          className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden transition-all font-medium text-slate-800"
+                          required
+                        />
+                      </div>
+
+                      {/* Center: Range Duration Connector */}
+                      <div className="sm:col-span-1 flex flex-col items-center justify-center py-1 sm:py-0">
+                        <div className="hidden sm:flex flex-col items-center gap-1">
+                          <div className="w-6 h-6 rounded-full bg-sky-100 flex items-center justify-center text-[#006699] shadow-2xs">
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </div>
+                          <span className="text-[10px] font-bold text-[#006699] whitespace-nowrap bg-white px-2 py-0.5 rounded-full border border-sky-200 shadow-2xs">
+                            {activeDuration} วัน
+                          </span>
+                        </div>
+                        <div className="flex sm:hidden items-center justify-center gap-2 py-0.5 w-full">
+                          <div className="h-px bg-sky-200 flex-1" />
+                          <span className="text-[11px] font-bold text-[#006699] flex items-center gap-1 bg-white px-2.5 py-0.5 rounded-full border border-sky-200 shadow-2xs">
+                            <ArrowRight className="w-3 h-3 text-[#006699]" />
+                            {activeDuration} วันทำการ
+                          </span>
+                          <div className="h-px bg-sky-200 flex-1" />
+                        </div>
+                      </div>
+
+                      {/* Right: End Date */}
+                      <div className="sm:col-span-5 p-3 bg-white rounded-xl border border-slate-200 hover:border-sky-300 transition-all space-y-1 shadow-2xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+                            <CalendarCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            วันสุดท้ายที่ลา (สิ้นสุด)
+                          </span>
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            {formatThaiDateShort(endDate)}
+                          </span>
+                        </div>
+                        <input
+                          type="date"
+                          value={endDate}
+                          min={startDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-sky-500 focus:outline-hidden transition-all font-medium text-slate-800"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quick Range Presets & Return to Work Info */}
+                    <div className="flex items-center justify-between gap-2 flex-wrap pt-0.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[11px] text-slate-400">เลือกช่วงเร็ว:</span>
+                        {[
+                          { label: '2 วัน', days: 1 },
+                          { label: '3 วัน', days: 2 },
+                          { label: '4 วัน', days: 3 },
+                          { label: '5 วัน (1 สัปดาห์)', days: 4 },
+                        ].map(p => (
+                          <button
+                            key={p.label}
+                            type="button"
+                            onClick={() => setEndDate(addDaysToDate(startDate, p.days))}
+                            className="text-[11px] px-2.5 py-0.5 rounded-md bg-white border border-slate-200 hover:border-sky-300 hover:bg-sky-50 text-slate-700 transition-colors shadow-2xs font-medium"
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {returnToWorkDate && (
+                        <div className="text-[11px] text-slate-600 bg-white/90 px-2.5 py-1 rounded-lg border border-sky-100 flex items-center gap-1.5 shadow-2xs">
+                          <Clock className="w-3.5 h-3.5 text-[#006699]" />
+                          <span>กลับมาปฏิบัติงาน: <strong className="text-slate-800">{formatThaiDate(returnToWorkDate, false)}</strong></span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -1103,22 +1286,22 @@ export default function DoctorLiffPage() {
               selectedType?.allows_half_day ? (
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { id: 'FULL_DAY', label: 'เต็มวัน (1.0 วัน)', desc: 'ตลอดวันทำการ' },
-                    { id: 'MORNING', label: 'ครึ่งวันเช้า (0.5 วัน)', desc: '08:00 - 12:00' },
-                    { id: 'AFTERNOON', label: 'ครึ่งวันบ่าย (0.5 วัน)', desc: '13:00 - 17:00' }
+                    { id: 'FULL_DAY', label: 'เต็มวัน (1 วัน)', desc: 'ตลอดวันทำการ' },
+                    { id: 'MORNING', label: 'ครึ่งเช้า (0.5)', desc: '08:00 - 12:00' },
+                    { id: 'AFTERNOON', label: 'ครึ่งบ่าย (0.5)', desc: '13:00 - 17:00' }
                   ].map(opt => (
                     <button
                       type="button"
                       key={opt.id}
                       onClick={() => setHalfDayType(opt.id)}
-                      className={`p-2.5 rounded-xl text-xs border text-center transition-all ${
+                      className={`p-2 sm:p-2.5 rounded-xl text-xs border text-center transition-all ${
                         halfDayType === opt.id
                           ? 'bg-[#006699] text-white border-[#006699] shadow-xs font-bold'
                           : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                       }`}
                     >
-                      <div className="font-semibold">{opt.label}</div>
-                      <div className={`text-[10px] mt-0.5 ${halfDayType === opt.id ? 'text-sky-100' : 'text-slate-400'}`}>
+                      <div className="font-semibold text-[11px] sm:text-xs">{opt.label}</div>
+                      <div className={`text-[9px] sm:text-[10px] mt-0.5 ${halfDayType === opt.id ? 'text-sky-100' : 'text-slate-400'}`}>
                         {opt.desc}
                       </div>
                     </button>
@@ -1140,78 +1323,56 @@ export default function DoctorLiffPage() {
                   </div>
                 </div>
                 <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-white border border-sky-200 text-[#006699] shadow-2xs">
-                  {activeDuration} วัน
+                  รวม {activeDuration} วัน
                 </span>
               </div>
             )}
           </div>
 
-          {/* Live Duration Calculation Card with Detailed Transparency Breakdown */}
-          <div className="p-3 bg-gradient-to-br from-sky-50/90 to-blue-50/60 border border-sky-200 rounded-xl space-y-2.5 text-xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-[#006699]/10 text-[#006699] flex items-center justify-center shrink-0">
-                  <CalendarDays className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-[11px] text-slate-500 font-medium">สรุปการคำนวณวันลาสุทธิ</div>
-                  <div className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                    <span className="text-[#006699]">{activeDuration} วัน</span>
-                    <span className="text-[10px] text-slate-500 font-normal">
-                      (คำนวณวันลาตามปฏิทิน นับรวมวันหยุดประจำ)
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#006699] text-white shadow-2xs">
-                หักสิทธิ์: {activeDuration} วัน
-              </span>
-            </div>
-
-            {/* Range Breakdown Details */}
-            {leaveMode === 'RANGE' && (
-              <div className="pt-2 border-t border-sky-200/60 grid grid-cols-3 gap-1.5 text-[11px]">
-                <div className="bg-white/90 p-2 rounded-lg border border-sky-100 text-center">
-                  <div className="text-slate-400 text-[10px]">วันตามปฏิทิน</div>
-                  <div className="font-bold text-slate-700">{breakdown.totalCalendarDays} วัน</div>
-                </div>
-                <div className="bg-white/90 p-2 rounded-lg border border-sky-100 text-center">
-                  <div className="text-slate-400 text-[10px]">เพดานลาต่อเนื่อง</div>
-                  <div className="font-bold text-slate-700">
-                    {selectedType?.max_days_per_request ? `ไม่เกิน ${selectedType.max_days_per_request} วัน` : 'ตามเกณฑ์ รพ.'}
-                  </div>
-                </div>
-                <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-200 text-center">
-                  <div className="text-emerald-700 text-[10px] font-semibold">วันลาสุทธิ (ตามปฏิทิน)</div>
-                  <div className="font-extrabold text-emerald-700">{activeDuration} วัน</div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Department Quota Indicator Box */}
-          {quotaInfo && (
-            <div className={`p-3 rounded-xl border text-xs flex items-center justify-between ${quotaInfo.status === 'FULL'
+          {/* Department Quota & Remaining Clinic Doctors Indicator Box */}
+          {quotaInfo && selectedType?.code !== 'SHIFT_SWAP' && (
+            <div className={`p-3 rounded-xl border text-xs space-y-1.5 ${quotaInfo.status === 'FULL'
                 ? 'bg-rose-50 border-rose-200 text-rose-800'
                 : quotaInfo.status === 'NEAR_LIMIT'
                   ? 'bg-amber-50 border-amber-200 text-amber-800'
                   : 'bg-emerald-50 border-emerald-200 text-emerald-800'
               }`}>
-              <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${quotaInfo.status === 'FULL' ? 'bg-rose-500' :
-                    quotaInfo.status === 'NEAR_LIMIT' ? 'bg-amber-500' : 'bg-emerald-500'
-                  }`} />
-                <div>
-                  <span className="font-bold">โควตาแผนก{quotaInfo.department_name}:</span>
-                  <span className="ml-1">
-                    ลาแล้ว {quotaInfo.current_on_leave} / {quotaInfo.max_allowed} ท่าน
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${quotaInfo.status === 'FULL' ? 'bg-rose-500' :
+                      quotaInfo.status === 'NEAR_LIMIT' ? 'bg-amber-500' : 'bg-emerald-500'
+                    }`} />
+                  <div>
+                    <span className="font-bold">แผนก{quotaInfo.department_name} ({formatThaiDateShort(startDate)}):</span>
+                    <span className="ml-1.5 font-extrabold">
+                      แพทย์ออกตรวจคงเหลือ {quotaInfo.remaining_doctors_count ?? 0} / {quotaInfo.total_doctors ?? 0} ท่าน
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-white/80 border border-current/15">
+                    ลาแล้ว {quotaInfo.current_on_leave} / โควตาลา {quotaInfo.max_allowed} ท่าน
+                  </span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white shadow-2xs">
+                    {quotaInfo.status === 'FULL' ? '⚠️ โควตาเต็ม' :
+                      quotaInfo.status === 'NEAR_LIMIT' ? 'ใกล้เต็ม' : 'ว่างปกติ'}
                   </span>
                 </div>
               </div>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white shadow-2xs">
-                {quotaInfo.status === 'FULL' ? '⚠️ โควตาเต็ม' :
-                  quotaInfo.status === 'NEAR_LIMIT' ? 'ใกล้เต็ม' : 'ว่างปกติ'}
-              </span>
+
+              {quotaInfo.available_doctors && quotaInfo.available_doctors.length > 0 && (
+                <div className="text-[11px] opacity-90 pl-4">
+                  <span>แพทย์ที่อยู่ปฏิบัติงาน: </span>
+                  <strong className="font-semibold">
+                    {quotaInfo.available_doctors.map(d => d.short_name).join(', ')}
+                  </strong>
+                  {quotaInfo.on_leave_doctors && quotaInfo.on_leave_doctors.length > 0 && (
+                    <span className="ml-1.5 text-rose-700">
+                      • ลาวันดังกล่าว: {quotaInfo.on_leave_doctors.map(d => d.short_name).join(', ')}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

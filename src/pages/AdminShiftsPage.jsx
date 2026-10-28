@@ -324,13 +324,6 @@ export default function AdminShiftsPage() {
         {/* Action Buttons */}
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => setShowBatchModal(true)}
-            className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 transition-all hover:scale-102"
-          >
-            <Sparkles className="w-4 h-4 text-sky-200" />
-            <span>สร้างตารางเวรอัตโนมัติ</span>
-          </button>
-          <button
             onClick={() => setShowSwapModal(true)}
             className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 transition-all hover:scale-102"
           >

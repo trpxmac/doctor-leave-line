@@ -46,13 +46,10 @@ export default function AdminMasterDataPage() {
   const [routes, setRoutes] = useState([]);
   const [routeSearch, setRouteSearch] = useState('');
   const [routeModalOpen, setRouteModalOpen] = useState(false);
-  const [batchModalOpen, setBatchModalOpen] = useState(false);
-  const [selectedRoute, setSelectedRoute] = useState(null);
   const [routeDoctorId, setRouteDoctorId] = useState('');
-  const [routeApproverId, setRouteApproverId] = useState('');
-  const [routeStepOrder, setRouteStepOrder] = useState(1);
-  const [batchDeptId, setBatchDeptId] = useState('');
-  const [batchApproverId, setBatchApproverId] = useState('');
+  const [routeStep1ApproverId, setRouteStep1ApproverId] = useState('');
+  const [routeStep2ApproverId, setRouteStep2ApproverId] = useState('');
+  const [isEditingDoctorRoute, setIsEditingDoctorRoute] = useState(false);
 
   // Leave Types State
   const [leaveTypes, setLeaveTypes] = useState([]);
@@ -276,107 +273,102 @@ export default function AdminMasterDataPage() {
     }
   };
 
-  // --- Handlers: Approval Routes ---
+  // --- Handlers: Approval Routes (Grouped by Doctor) ---
+  const handleSelectDoctorForRoute = (docId) => {
+    setRouteDoctorId(docId);
+    const step1 = routes.find(r => r.doctor_id === docId && Number(r.step_order) === 1);
+    const step2 = routes.find(r => r.doctor_id === docId && Number(r.step_order) === 2);
+    const defaultExec = doctors.find(d => d.employee_id === 'EXEC-PARIWAT') || doctors.find(d => d.id !== docId);
+    setRouteStep1ApproverId(step1 ? step1.approver_id : (defaultExec?.id || ''));
+    setRouteStep2ApproverId(step2 ? step2.approver_id : '');
+  };
+
   const handleOpenAddRoute = () => {
-    setSelectedRoute(null);
-    setRouteDoctorId(doctors[0]?.id || '');
-    setRouteApproverId(doctors[1]?.id || doctors[0]?.id || '');
-    setRouteStepOrder(1);
+    setIsEditingDoctorRoute(false);
+    const eligibleDocs = doctors.filter(d => d.employee_id !== 'EMP-KOONG' && d.employee_id !== 'EXEC-PARIWAT');
+    const firstDoc = eligibleDocs[0] || doctors[0];
+    if (firstDoc) {
+      handleSelectDoctorForRoute(firstDoc.id);
+    }
     setRouteModalOpen(true);
   };
 
-  const handleOpenEditRoute = (r) => {
-    setSelectedRoute(r);
-    setRouteDoctorId(r.doctor_id);
-    setRouteApproverId(r.approver_id);
-    setRouteStepOrder(r.step_order);
+  const handleOpenEditDoctorRoute = (docGroup) => {
+    setIsEditingDoctorRoute(true);
+    setRouteDoctorId(docGroup.doctor.id);
+    setRouteStep1ApproverId(docGroup.step1 ? docGroup.step1.approver_id : '');
+    setRouteStep2ApproverId(docGroup.step2 ? docGroup.step2.approver_id : '');
     setRouteModalOpen(true);
   };
 
   const handleSaveRoute = async (e) => {
     e.preventDefault();
-    if (!routeDoctorId || !routeApproverId) {
-      showToast('กรุณาเลือกแพทย์และผู้อนุมัติ', 'error');
+    if (!routeDoctorId || !routeStep1ApproverId) {
+      showToast('กรุณาเลือกแพทย์และผู้อนุมัติขั้นที่ 1', 'error');
       return;
     }
-    if (routeDoctorId === routeApproverId) {
+    if (routeDoctorId === routeStep1ApproverId || (routeStep2ApproverId && routeDoctorId === routeStep2ApproverId)) {
       showToast('แพทย์ไม่สามารถเป็นผู้อนุมัติตนเองได้', 'error');
+      return;
+    }
+    if (routeStep2ApproverId && routeStep1ApproverId === routeStep2ApproverId) {
+      showToast('ผู้อนุมัติขั้นที่ 1 และขั้นที่ 2 ไม่ควรเป็นคนเดียวกัน (หากอนุมัติจบในคนเดียว ให้เลือกขั้นที่ 2 เป็น "ไม่มีขั้นที่ 2")', 'error');
       return;
     }
 
     try {
-      if (selectedRoute) {
-        const res = await fetch(`/api/approval-routes/${selectedRoute.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            approver_id: routeApproverId,
-            step_order: routeStepOrder
-          })
-        });
-        if (!res.ok) throw new Error((await res.json()).error);
-        showToast('แก้ไขสายอนุมัติสำเร็จ');
-      } else {
-        const res = await fetch('/api/approval-routes', {
+      // 1. Save Step 1 (POST /api/approval-routes upserts by doctor_id + step_order)
+      const res1 = await fetch('/api/approval-routes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          doctor_id: routeDoctorId,
+          approver_id: routeStep1ApproverId,
+          step_order: 1
+        })
+      });
+      if (!res1.ok) throw new Error((await res1.json()).error);
+
+      // 2. Save or remove Step 2
+      const existingStep2 = routes.find(r => r.doctor_id === routeDoctorId && Number(r.step_order) === 2);
+      if (routeStep2ApproverId) {
+        const res2 = await fetch('/api/approval-routes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             doctor_id: routeDoctorId,
-            approver_id: routeApproverId,
-            step_order: routeStepOrder
+            approver_id: routeStep2ApproverId,
+            step_order: 2
           })
         });
-        if (!res.ok) throw new Error((await res.json()).error);
-        showToast('กำหนดสายอนุมัติเรียบร้อย');
+        if (!res2.ok) throw new Error((await res2.json()).error);
+      } else if (existingStep2) {
+        await fetch(`/api/approval-routes/${existingStep2.id}`, { method: 'DELETE' });
       }
+
+      showToast('บันทึกสายการอนุมัติเรียบร้อย');
       setRouteModalOpen(false);
-      const res2 = await fetch('/api/approval-routes');
-      if (res2.ok) setRoutes(await res2.json());
+      const updatedRes = await fetch('/api/approval-routes');
+      if (updatedRes.ok) setRoutes(await updatedRes.json());
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(err.message || 'เกิดข้อผิดพลาดในการบันทึกสายอนุมัติ', 'error');
     }
   };
 
-  const handleDeleteRoute = async (r) => {
-    if (!window.confirm(`ยืนยันการลบสายอนุมัติของ ${r.doctor_name}?`)) return;
+  const handleClearDoctorRoute = async (docGroup) => {
+    if (!window.confirm(`ยืนยันการล้างสายอนุมัติของ ${docGroup.doctor_name}?`)) return;
     try {
-      const res = await fetch(`/api/approval-routes/${r.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        showToast('ลบสายอนุมัติเรียบร้อย');
-        setRoutes(prev => prev.filter(item => item.id !== r.id));
+      if (docGroup.step1) {
+        await fetch(`/api/approval-routes/${docGroup.step1.id}`, { method: 'DELETE' });
       }
-    } catch (err) {
+      if (docGroup.step2) {
+        await fetch(`/api/approval-routes/${docGroup.step2.id}`, { method: 'DELETE' });
+      }
+      showToast('ล้างสายอนุมัติเรียบร้อย');
+      const updatedRes = await fetch('/api/approval-routes');
+      if (updatedRes.ok) setRoutes(await updatedRes.json());
+    } catch {
       showToast('ไม่สามารถลบสายอนุมัติได้', 'error');
-    }
-  };
-
-  const handleBatchAssign = async (e) => {
-    e.preventDefault();
-    if (!batchDeptId || !batchApproverId) {
-      showToast('กรุณาเลือกแผนกและผู้อนุมัติ', 'error');
-      return;
-    }
-    try {
-      const res = await fetch('/api/approval-routes/batch-department', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          department_id: batchDeptId,
-          approver_id: batchApproverId,
-          step_order: 1
-        })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        showToast(data.message);
-        setBatchModalOpen(false);
-        const res2 = await fetch('/api/approval-routes');
-        if (res2.ok) setRoutes(await res2.json());
-      } else {
-        showToast(data.error || 'เกิดข้อผิดพลาด', 'error');
-      }
-    } catch (err) {
-      showToast('ไม่สามารถตั้งค่าสายอนุมัติตามแผนกได้', 'error');
     }
   };
 
@@ -465,15 +457,39 @@ export default function AdminMasterDataPage() {
     }
   };
 
-  // Filtered lists
-  const filteredRoutes = routes.filter(r => {
+  // Group approval routes 1 row per doctor (excluding admin staff EMP-KOONG & final executive approver EXEC-PARIWAT)
+  const groupedDoctorRoutes = doctors
+    .filter(d => d.employee_id !== 'EMP-KOONG' && d.employee_id !== 'EXEC-PARIWAT')
+    .map(doc => {
+      const dept = departments.find(dp => dp.id === doc.department_id);
+      const docRoutes = routes
+        .filter(r => r.doctor_id === doc.id)
+        .sort((a, b) => Number(a.step_order) - Number(b.step_order));
+      const step1 = docRoutes.find(r => Number(r.step_order) === 1) || null;
+      const step2 = docRoutes.find(r => Number(r.step_order) === 2) || null;
+      const isDeptHead = doc.role === 'APPROVER' || (doc.employee_id && doc.employee_id.startsWith('HEAD-'));
+      return {
+        doctor: doc,
+        doctor_id: doc.id,
+        doctor_name: `${doc.prefix_th}${doc.first_name_th} ${doc.last_name_th}`,
+        doctor_employee_id: doc.employee_id,
+        department_name: dept ? dept.name_th : '',
+        is_dept_head: isDeptHead,
+        step1,
+        step2,
+        has_route: Boolean(step1 || step2)
+      };
+    });
+
+  const filteredDoctorRoutes = groupedDoctorRoutes.filter(item => {
     if (!routeSearch.trim()) return true;
     const q = routeSearch.toLowerCase();
     return (
-      r.doctor_name.toLowerCase().includes(q) ||
-      r.approver_name.toLowerCase().includes(q) ||
-      r.department_name.toLowerCase().includes(q) ||
-      r.doctor_employee_id.toLowerCase().includes(q)
+      item.doctor_name.toLowerCase().includes(q) ||
+      item.doctor_employee_id.toLowerCase().includes(q) ||
+      item.department_name.toLowerCase().includes(q) ||
+      (item.step1?.approver_name || '').toLowerCase().includes(q) ||
+      (item.step2?.approver_name || '').toLowerCase().includes(q)
     );
   });
 
@@ -517,7 +533,7 @@ export default function AdminMasterDataPage() {
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex flex-wrap rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold gap-1">
+        <div className="flex flex-wrap sm:flex-nowrap overflow-x-auto rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold gap-1">
           <button
             onClick={() => setActiveTab('APPROVAL_ROUTES')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
@@ -527,7 +543,7 @@ export default function AdminMasterDataPage() {
             }`}
           >
             <GitMerge className="w-3.5 h-3.5" />
-            <span>สายการอนุมัติ ({routes.length})</span>
+            <span>สายการอนุมัติ ({groupedDoctorRoutes.length} ท่าน)</span>
           </button>
 
           <button
@@ -574,6 +590,26 @@ export default function AdminMasterDataPage() {
       {activeTab === 'APPROVAL_ROUTES' && (
         <div className="space-y-4 animate-in fade-in duration-150">
           
+          {/* Easy-to-understand Visual Flow Guide */}
+          <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+            <div className="space-y-1">
+              <div className="font-bold text-sky-900 flex items-center gap-1.5">
+                <GitMerge className="w-4 h-4 text-[#006699]" />
+                <span>รูปแบบสายการอนุมัติใบลาแพทย์ (แยกตามตำแหน่ง)</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-600">
+                <span className="inline-flex items-center gap-1">
+                  <span className="px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 font-bold">แพทย์ในแผนก</span>
+                  <span>➔ ขั้นที่ 1: <b>หัวหน้าแผนก</b> ➔ ขั้นที่ 2: <b>นพ.ปริวรรธน์ (ผช.ผอ.)</b></span>
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">หัวหน้าแผนก</span>
+                  <span>➔ อนุมัติโดยตรง: <b>นพ.ปริวรรธน์ (ผช.ผอ.)</b></span>
+                </span>
+              </div>
+            </div>
+          </div>
+
           {/* Action Row */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="relative w-full sm:w-80">
@@ -582,46 +618,33 @@ export default function AdminMasterDataPage() {
                 type="text"
                 value={routeSearch}
                 onChange={(e) => setRouteSearch(e.target.value)}
-                placeholder="ค้นหาแพทย์, ผู้อนุมัติ, แผนก..."
+                placeholder="ค้นหาชื่อแพทย์, แผนก, ผู้อนุมัติ..."
                 className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-[#006699]"
               />
             </div>
 
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
               <button
-                onClick={() => {
-                  setBatchDeptId(departments[0]?.id || '');
-                  setBatchApproverId(doctors[1]?.id || doctors[0]?.id || '');
-                  setBatchModalOpen(true);
-                }}
-                className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-sky-50 text-[#006699] border border-sky-200 hover:bg-sky-100 text-xs font-bold transition-all shadow-2xs"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>ตั้งค่าด่วนตามแผนก</span>
-              </button>
-
-              <button
                 onClick={handleOpenAddRoute}
-                className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl bg-[#006699] hover:bg-[#005580] text-white text-xs font-bold transition-all shadow-sm shadow-sky-900/10"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#006699] hover:bg-[#005580] text-white text-xs font-bold transition-all shadow-sm shadow-sky-900/10"
               >
                 <Plus className="w-4 h-4" />
-                <span>ผูกสายอนุมัติรายบุคคล</span>
+                <span>ตั้งค่าสายอนุมัติรายบุคคล</span>
               </button>
             </div>
           </div>
 
-          {/* Table */}
+          {/* Table (1 Row Per Doctor) */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
             {loading ? (
               <div className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
                 <RefreshCw className="w-6 h-6 animate-spin text-[#006699]" />
                 <span className="text-xs">กำลังโหลดสายอนุมัติ...</span>
               </div>
-            ) : filteredRoutes.length === 0 ? (
+            ) : filteredDoctorRoutes.length === 0 ? (
               <div className="p-12 text-center text-slate-400 space-y-2">
                 <GitMerge className="w-8 h-8 mx-auto text-slate-300 stroke-[1.5]" />
-                <p className="text-sm font-medium text-slate-600">ยังไม่มีสายอนุมัติที่ตั้งค่าไว้</p>
-                <p className="text-xs text-slate-400">คุณสามารถกดปุ่ม "ตั้งค่าด่วนตามแผนก" เพื่อผูกผู้อนุมัติให้อัตโนมัติ</p>
+                <p className="text-sm font-medium text-slate-600">ไม่พบรายชื่อแพทย์ที่ค้นหา</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -630,63 +653,98 @@ export default function AdminMasterDataPage() {
                     <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
                       <th className="py-3 px-4">แพทย์ผู้ขอลา</th>
                       <th className="py-3 px-4">แผนก</th>
-                      <th className="py-3 px-4 text-center">ขั้นที่</th>
-                      <th className="py-3 px-4">ผู้อนุมัติ (Approver)</th>
-                      <th className="py-3 px-4 text-center">สถานะ</th>
+                      <th className="py-3 px-4">ลำดับสายการอนุมัติ (Approval Flow)</th>
                       <th className="py-3 px-4 text-right">จัดการ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredRoutes.map((r) => (
-                      <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-4 font-bold text-slate-800">
-                          <div className="flex items-center gap-2">
-                            <UserCheck className="w-4 h-4 text-[#006699]" />
-                            <span>{r.doctor_name}</span>
-                            <span className="text-[10px] text-slate-400 font-mono">({r.doctor_employee_id})</span>
+                    {filteredDoctorRoutes.map((item) => (
+                      <tr key={item.doctor_id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                              item.is_dept_head ? 'bg-emerald-50 text-emerald-700' : 'bg-sky-50 text-[#006699]'
+                            }`}>
+                              <UserCheck className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="font-bold text-slate-800 flex items-center gap-1.5 flex-wrap">
+                                <span>{item.doctor_name}</span>
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  item.is_dept_head
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-sky-100 text-sky-800'
+                                }`}>
+                                  {item.is_dept_head ? 'หัวหน้าแผนก' : 'แพทย์ในแผนก'}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-mono">
+                                {item.doctor_employee_id}
+                              </div>
+                            </div>
                           </div>
                         </td>
 
-                        <td className="py-3 px-4 text-slate-600">
-                          แผนก{r.department_name}
+                        <td className="py-3.5 px-4 text-slate-600 font-medium whitespace-nowrap">
+                          แผนก{item.department_name}
                         </td>
 
-                        <td className="py-3 px-4 text-center">
-                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-100 font-bold text-slate-700 text-[11px]">
-                            {r.step_order}
-                          </span>
+                        <td className="py-3.5 px-4">
+                          {!item.has_route ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-semibold">
+                              <AlertCircle className="w-3.5 h-3.5" />
+                              <span>ยังไม่ได้ตั้งค่าผู้อนุมัติ</span>
+                            </span>
+                          ) : (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {/* Step 1 Badge */}
+                              {item.step1 && (
+                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    item.step2
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-purple-100 text-purple-800'
+                                  }`}>
+                                    {item.step2 ? 'ขั้นที่ 1' : 'อนุมัติโดยตรง (1 ขั้นตอน)'}
+                                  </span>
+                                  <span className="font-bold text-slate-800">{item.step1.approver_name}</span>
+                                </div>
+                              )}
+
+                              {/* Arrow + Step 2 Badge (if 2-step flow) */}
+                              {item.step2 && (
+                                <>
+                                  <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-50/60 border border-purple-200 text-slate-800">
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">
+                                      ขั้นที่ 2 (อนุมัติขั้นสุดท้าย)
+                                    </span>
+                                    <span className="font-bold text-slate-800">{item.step2.approver_name}</span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
                         </td>
 
-                        <td className="py-3 px-4">
-                          <div className="font-semibold text-slate-800 flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                            <span>{r.approver_name}</span>
-                            <span className="text-[10px] text-slate-400 font-mono">({r.approver_employee_id})</span>
-                          </div>
-                        </td>
-
-                        <td className="py-3 px-4 text-center">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                            เปิดใช้งาน
-                          </span>
-                        </td>
-
-                        <td className="py-3 px-4 text-right">
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
-                              onClick={() => handleOpenEditRoute(r)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-[#006699] hover:bg-sky-50"
-                              title="เปลี่ยนผู้อนุมัติ"
+                              onClick={() => handleOpenEditDoctorRoute(item)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-sky-50 hover:border-sky-200 text-slate-700 hover:text-[#006699] text-[11px] font-bold transition-colors"
                             >
-                              <Edit2 className="w-3.5 h-3.5" />
+                              <Edit2 className="w-3 h-3" />
+                              <span>ตั้งค่า / แก้ไข</span>
                             </button>
-                            <button
-                              onClick={() => handleDeleteRoute(r)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                              title="ลบ"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {item.has_route && (
+                              <button
+                                onClick={() => handleClearDoctorRoute(item)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                title="ล้างสายอนุมัติ"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1256,15 +1314,18 @@ export default function AdminMasterDataPage() {
       )}
 
       {/* ========================================================= */}
-      {/* MODAL 1: ADD/EDIT APPROVAL ROUTE                          */}
+      {/* MODAL 1: ADD/EDIT APPROVAL ROUTE (UNIFIED STEP 1 & 2)     */}
       {/* ========================================================= */}
       {routeModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
             <div className="bg-slate-50 px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-              <h2 className="text-sm font-bold text-slate-800">
-                {selectedRoute ? 'แก้ไขผู้อนุมัติ' : 'ผูกสายอนุมัติรายบุคคล'}
-              </h2>
+              <div className="flex items-center gap-2">
+                <GitMerge className="w-4 h-4 text-[#006699]" />
+                <h2 className="text-sm font-bold text-slate-800">
+                  {isEditingDoctorRoute ? 'แก้ไขสายการอนุมัติรายบุคคล' : 'ตั้งค่าสายการอนุมัติรายบุคคล'}
+                </h2>
+              </div>
               <button onClick={() => setRouteModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-4 h-4" />
               </button>
@@ -1275,44 +1336,62 @@ export default function AdminMasterDataPage() {
                 <label className="block font-bold text-slate-700 mb-1">แพทย์ผู้ขอลา</label>
                 <select
                   value={routeDoctorId}
-                  onChange={(e) => setRouteDoctorId(e.target.value)}
-                  disabled={Boolean(selectedRoute)}
-                  className="w-full p-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-[#006699]"
+                  onChange={(e) => handleSelectDoctorForRoute(e.target.value)}
+                  disabled={isEditingDoctorRoute}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 bg-white disabled:bg-slate-100 focus:ring-2 focus:ring-[#006699]"
                   required
                 >
-                  {doctors.map(d => (
-                    <option key={d.id} value={d.id}>
-                      {d.prefix_th}{d.first_name_th} {d.last_name_th} ({d.employee_id})
-                    </option>
-                  ))}
+                  {doctors
+                    .filter(d => d.employee_id !== 'EMP-KOONG' && d.employee_id !== 'EXEC-PARIWAT')
+                    .map(d => (
+                      <option key={d.id} value={d.id}>
+                        {d.prefix_th}{d.first_name_th} {d.last_name_th} ({d.employee_id})
+                      </option>
+                    ))}
                 </select>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">ลำดับขั้นการอนุมัติ (Step Order)</label>
+              <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-2">
+                <label className="block font-bold text-emerald-900">
+                  1. ผู้อนุมัติขั้นที่ 1 (หัวหน้าแผนก / ผู้อนุมัติต้นสังกัด) <span className="text-rose-500">*</span>
+                </label>
                 <select
-                  value={routeStepOrder}
-                  onChange={(e) => setRouteStepOrder(Number(e.target.value))}
-                  className="w-full p-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-[#006699]"
-                >
-                  <option value={1}>ขั้นที่ 1 (หัวหน้าแผนก / Line Approver)</option>
-                  <option value={2}>ขั้นที่ 2 (ผู้อำนวยการแพทย์ / Medical Director)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">ผู้อนุมัติ (Approver)</label>
-                <select
-                  value={routeApproverId}
-                  onChange={(e) => setRouteApproverId(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-[#006699]"
+                  value={routeStep1ApproverId}
+                  onChange={(e) => setRouteStep1ApproverId(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-emerald-300 bg-white focus:ring-2 focus:ring-emerald-600"
                   required
                 >
-                  {doctors.filter(d => d.id !== routeDoctorId).map(d => (
-                    <option key={d.id} value={d.id}>
-                      {d.prefix_th}{d.first_name_th} {d.last_name_th} ({d.employee_id})
-                    </option>
-                  ))}
+                  <option value="">-- เลือกผู้อนุมัติขั้นที่ 1 --</option>
+                  {doctors
+                    .filter(d => d.id !== routeDoctorId && d.employee_id !== 'EMP-KOONG')
+                    .map(d => (
+                      <option key={d.id} value={d.id}>
+                        {d.prefix_th}{d.first_name_th} {d.last_name_th} ({d.employee_id})
+                      </option>
+                    ))}
+                </select>
+                <p className="text-[11px] text-emerald-800/80">
+                  กรณีหัวหน้าแผนกเป็นผู้ลาเอง ให้เลือกผู้บริหาร (เช่น นพ.ปริวรรธน์) เป็นขั้นที่ 1 และเว้นขั้นที่ 2 ไว้
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-purple-50/60 border border-purple-200 space-y-2">
+                <label className="block font-bold text-purple-900">
+                  2. ผู้อนุมัติขั้นที่ 2 (ผู้บริหาร / ผช.ผอ. อนุมัติขั้นสุดท้าย)
+                </label>
+                <select
+                  value={routeStep2ApproverId}
+                  onChange={(e) => setRouteStep2ApproverId(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-purple-300 bg-white focus:ring-2 focus:ring-purple-600"
+                >
+                  <option value="">-- ไม่ใช้ขั้นที่ 2 (อนุมัติจบใน 1 ขั้นตอน) --</option>
+                  {doctors
+                    .filter(d => d.id !== routeDoctorId && d.id !== routeStep1ApproverId && d.employee_id !== 'EMP-KOONG')
+                    .map(d => (
+                      <option key={d.id} value={d.id}>
+                        {d.prefix_th}{d.first_name_th} {d.last_name_th} ({d.employee_id})
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -1326,80 +1405,9 @@ export default function AdminMasterDataPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-[#006699] hover:bg-[#005580] text-white font-bold"
+                  className="px-4 py-2 rounded-xl bg-[#006699] hover:bg-[#005580] text-white font-bold shadow-xs"
                 >
                   บันทึกสายอนุมัติ
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* MODAL 2: BATCH ASSIGN APPROVER BY DEPT                    */}
-      {/* ========================================================= */}
-      {batchModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="bg-sky-50 px-5 py-4 border-b border-sky-100 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#006699]" />
-                <h2 className="text-sm font-bold text-slate-800">ตั้งค่าผู้อนุมัติตามแผนก (Batch Assign)</h2>
-              </div>
-              <button onClick={() => setBatchModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleBatchAssign} className="p-5 space-y-4 text-xs">
-              <p className="text-slate-500 leading-relaxed">
-                กำหนดผู้อนุมัติให้กับแพทย์ทุกคนในแผนกที่เลือกใน 1 คลิก เพื่อความสะดวกรวดเร็ว
-              </p>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">เลือกแผนก</label>
-                <select
-                  value={batchDeptId}
-                  onChange={(e) => setBatchDeptId(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-slate-300 bg-white"
-                  required
-                >
-                  {departments.map(dp => (
-                    <option key={dp.id} value={dp.id}>แผนก{dp.name_th} ({dp.code})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">ผู้อนุมัติหลักของแผนก</label>
-                <select
-                  value={batchApproverId}
-                  onChange={(e) => setBatchApproverId(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-slate-300 bg-white"
-                  required
-                >
-                  {doctors.map(d => (
-                    <option key={d.id} value={d.id}>
-                      {d.prefix_th}{d.first_name_th} {d.last_name_th} ({d.employee_id})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setBatchModalOpen(false)}
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600"
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-[#006699] text-white font-bold"
-                >
-                  ปรับใช้ทันที
                 </button>
               </div>
             </form>

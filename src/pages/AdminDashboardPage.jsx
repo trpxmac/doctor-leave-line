@@ -31,6 +31,7 @@ export default function AdminDashboardPage() {
 
   const [stats, setStats] = useState(null);
   const [requests, setRequests] = useState([]);
+  const [leaveTypes, setLeaveTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'calendar'
 
@@ -47,7 +48,7 @@ export default function AdminDashboardPage() {
   // Form state for creating on behalf
   const todayStr = new Date().toISOString().split('T')[0];
   const [newDoctorId, setNewDoctorId] = useState('');
-  const [newLeaveTypeId, setNewLeaveTypeId] = useState('lt-2-sick');
+  const [newLeaveTypeId, setNewLeaveTypeId] = useState('');
   const [newStartDate, setNewStartDate] = useState(todayStr);
   const [newEndDate, setNewEndDate] = useState(todayStr);
   const [newHalfDay, setNewHalfDay] = useState('FULL_DAY');
@@ -57,13 +58,22 @@ export default function AdminDashboardPage() {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const [statsRes, reqsRes] = await Promise.all([
+      const [statsRes, reqsRes, ltRes] = await Promise.all([
         fetch('/api/stats/dashboard'),
-        fetch('/api/leave-requests')
+        fetch('/api/leave-requests'),
+        fetch('/api/leave-types')
       ]);
 
       if (statsRes.ok) setStats(await statsRes.json());
       if (reqsRes.ok) setRequests(await reqsRes.json());
+      if (ltRes.ok) {
+        const ltData = await ltRes.json();
+        setLeaveTypes(ltData);
+        if (ltData.length > 0 && !newLeaveTypeId) {
+          const sickType = ltData.find(t => t.code === 'SICK') || ltData[0];
+          setNewLeaveTypeId(sickType.id);
+        }
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -212,6 +222,14 @@ export default function AdminDashboardPage() {
 
         <div className="flex flex-wrap items-center gap-2">
           <button
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#006699] hover:bg-[#005580] text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-98"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>บันทึกการลาแทนแพทย์</span>
+          </button>
+
+          <button
             onClick={exportToCSV}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-98"
           >
@@ -220,44 +238,12 @@ export default function AdminDashboardPage() {
           </button>
 
           <Link
-            to="/admin/holidays"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-sky-50 hover:bg-sky-100 text-[#006699] border border-sky-200 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-98"
-          >
-            <CalendarDays className="w-4 h-4 text-[#006699]" />
-            <span>ปฏิทินวันหยุด</span>
-          </Link>
-
-          <Link
-            to="/admin/tenure"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-98"
-          >
-            <Award className="w-4 h-4 text-amber-700" />
-            <span>คำนวณอายุงาน</span>
-          </Link>
-
-          <Link
             to="/admin/master-data"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-98"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-2xs"
           >
             <GitMerge className="w-4 h-4 text-purple-700" />
             <span>สายอนุมัติ & การลา</span>
           </Link>
-
-          <Link
-            to="/admin/shifts"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-98"
-          >
-            <CalendarRange className="w-4 h-4 text-emerald-700" />
-            <span>ตารางเวรแพทย์</span>
-          </Link>
-
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#006699] hover:bg-[#005580] text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-98"
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span>บันทึกการลาแทนแพทย์</span>
-          </button>
 
           <button
             onClick={fetchDashboardData}
@@ -360,7 +346,7 @@ export default function AdminDashboardPage() {
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">เกณฑ์โควตาแผนก</span>
+            <span className="text-xs font-semibold text-slate-500">เกณฑ์โควตาแผนกวันนี้</span>
             <Link
               to="/admin/criteria"
               className="text-[11px] text-[#006699] font-bold hover:underline flex items-center gap-0.5"
@@ -369,18 +355,52 @@ export default function AdminDashboardPage() {
               <ChevronRight className="w-3 h-3" />
             </Link>
           </div>
-          <div className="mt-2 text-xs space-y-1">
-            {stats?.departments?.map(d => (
-              <div key={d.department_id} className="flex justify-between items-center text-[11px]">
-                <span className="text-slate-600">{d.name_th}:</span>
-                <span className={`font-semibold ${d.is_quota_full ? 'text-rose-600' : 'text-slate-800'}`}>
+          <div className="mt-2 text-2xl font-bold text-slate-900">
+            {stats?.departments?.filter(d => !d.is_quota_full).length || 0}
+            <span className="text-sm font-semibold text-slate-400">/{stats?.departments?.length || 10}</span>
+            <span className="text-xs font-normal text-slate-400 ml-1.5">แผนกว่าง</span>
+          </div>
+          <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
+            <span>โควตาเต็มวันนี้:</span>
+            <span className={`font-bold ${(stats?.departments?.filter(d => d.is_quota_full).length || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+              {stats?.departments?.filter(d => d.is_quota_full).length || 0} แผนก
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Compact Department Quota Strip */}
+      {stats?.departments && stats.departments.length > 0 && (
+        <div className="bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+              สถานะโควตาการลาแยกตามแผนกวันนี้ ({stats.departments.length} แผนก)
+            </span>
+            <Link to="/admin/criteria" className="text-[11px] text-[#006699] font-semibold hover:underline">
+              ปรับเพดานโควตา →
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+            {stats.departments.map(d => (
+              <div
+                key={d.department_id}
+                className={`px-2.5 py-1.5 rounded-xl border text-[11px] flex items-center justify-between gap-1 ${
+                  d.is_quota_full
+                    ? 'bg-rose-50 border-rose-200 text-rose-800'
+                    : d.on_leave_today_count > 0
+                    ? 'bg-amber-50/60 border-amber-200 text-slate-800'
+                    : 'bg-slate-50/80 border-slate-200/80 text-slate-600'
+                }`}
+              >
+                <span className="truncate font-medium" title={d.name_th}>{d.name_th}</span>
+                <span className={`font-bold shrink-0 ${d.is_quota_full ? 'text-rose-600' : 'text-slate-800'}`}>
                   {d.on_leave_today_count}/{d.max_leave_per_day} {d.is_quota_full && '⚠️'}
                 </span>
               </div>
             ))}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Main Table / Calendar Area */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden">
@@ -632,10 +652,11 @@ export default function AdminDashboardPage() {
                     onChange={(e) => setNewLeaveTypeId(e.target.value)}
                     className="w-full p-2.5 rounded-xl border border-slate-200 bg-slate-50 font-medium"
                   >
-                    <option value="lt-2-sick">ลาป่วย (Sick Leave)</option>
-                    <option value="lt-1-vacation">ลาพักผ่อน (Vacation)</option>
-                    <option value="lt-3-personal">ลากิจ (Personal)</option>
-                    <option value="lt-5-unpaid">ลาไม่รับค่าตอบแทน (Unpaid)</option>
+                    {leaveTypes.map(lt => (
+                      <option key={lt.id} value={lt.id}>
+                        {lt.name_th} ({lt.code})
+                      </option>
+                    ))}
                   </select>
                 </div>
 

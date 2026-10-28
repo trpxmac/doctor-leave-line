@@ -359,7 +359,7 @@ const getInitialSeedData = () => {
     },
     {
       id: '00000000-0000-0000-0000-000000002004',
-      doctor_id: 'c0000000-0000-0000-0000-000000000002', // Dr. Paravee
+      doctor_id: 'c0000000-0000-0000-0000-000000000011', // Dr. Thanwa (Head MED)
       shift_date: getOffsetDate(1),
       shift_type: 'IPD_ROUND',
       department_id: 'd1111111-1111-1111-1111-111111111111',
@@ -371,7 +371,7 @@ const getInitialSeedData = () => {
     },
     {
       id: '00000000-0000-0000-0000-000000002005',
-      doctor_id: 'c0000000-0000-0000-0000-000000000002', // Dr. Paravee
+      doctor_id: 'c0000000-0000-0000-0000-000000000011', // Dr. Thanwa (Head MED)
       shift_date: getOffsetDate(2),
       shift_type: 'OPD_AFTERNOON',
       department_id: 'd1111111-1111-1111-1111-111111111111',
@@ -450,10 +450,17 @@ export const initStore = async () => {
   if (!db.contact_settings) db.contact_settings = seed.contact_settings;
   if (!db.doctor_shifts) db.doctor_shifts = seed.doctor_shifts;
 
-  // Migrate/sync leave_types with latest policy requirements
+  // Migrate/sync leave_types with latest policy requirements and deduplicate by code
   if (!db.leave_types) {
     db.leave_types = seed.leave_types;
   } else {
+    const seenCodes = new Set();
+    db.leave_types = db.leave_types.filter(lt => {
+      if (!lt.code || seenCodes.has(lt.code)) return false;
+      seenCodes.add(lt.code);
+      return true;
+    });
+
     seed.leave_types.forEach(seedLt => {
       const existing = db.leave_types.find(lt => lt.code === seedLt.code || lt.id === seedLt.id);
       if (existing) {
@@ -473,6 +480,28 @@ export const initStore = async () => {
       } else {
         db.leave_types.push(seedLt);
       }
+    });
+  }
+
+  // Remove legacy duplicate doctor DOC-001 (นพ.ปารวี c0000000-0000-0000-0000-000000000002) which duplicated HEAD-MED / HEAD-PED
+  const legacyParaveeId = 'c0000000-0000-0000-0000-000000000002';
+  const realHeadMedId = 'c0000000-0000-0000-0000-000000000011';
+  if (db.doctors) {
+    db.doctors = db.doctors.filter(d => d.id !== legacyParaveeId);
+  }
+  if (db.doctor_roles) {
+    db.doctor_roles = db.doctor_roles.filter(r => r.doctor_id !== legacyParaveeId);
+  }
+  if (db.doctor_shifts) {
+    db.doctor_shifts.forEach(s => {
+      if (s.doctor_id === legacyParaveeId) s.doctor_id = realHeadMedId;
+      if (s.substitute_doctor_id === legacyParaveeId) s.substitute_doctor_id = realHeadMedId;
+    });
+  }
+  if (db.leave_requests) {
+    db.leave_requests.forEach(r => {
+      if (r.doctor_id === legacyParaveeId) r.doctor_id = realHeadMedId;
+      if (r.substitute_doctor_id === legacyParaveeId) r.substitute_doctor_id = realHeadMedId;
     });
   }
 

@@ -208,7 +208,7 @@ export default function DoctorHistoryPage() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3">
           {balances.length === 0 ? (
             <div className="col-span-full text-center py-6 text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
               {currentDoctor?.doctor_type === 'PART_TIME'
@@ -217,48 +217,80 @@ export default function DoctorHistoryPage() {
             </div>
           ) : (
             balances.map(b => {
-              const isFull = Number(b.remaining_days) <= 0;
+              const code = b.leave_type_code;
+              const isNonDayQuota = ['TRAINING', 'PERSONAL', 'SHIFT_SWAP', 'UNPAID'].includes(code);
+              const isTraining = code === 'TRAINING';
               const used = Number(b.used_days || 0);
               const pending = Number(b.pending_days || 0);
               const total = Number(b.total_quota || 0);
-              const pct = total > 0 ? Math.min(100, Math.max(0, (Number(b.remaining_days) / total) * 100)) : 0;
+              const reqCount = Number(b.request_count_this_year || 0);
+              const isFull = isTraining
+                ? reqCount >= 1
+                : (!isNonDayQuota && total > 0 && Number(b.remaining_days) <= 0);
+              const pct = isTraining
+                ? (reqCount >= 1 ? 0 : 100)
+                : (!isNonDayQuota && total > 0 ? Math.min(100, Math.max(0, (Number(b.remaining_days) / total) * 100)) : 100);
 
               return (
                 <div
                   key={b.id}
-                  className={`p-3.5 rounded-2xl border transition-all duration-200 flex flex-col justify-between ${
+                  className={`p-3 sm:p-3.5 rounded-2xl border transition-all duration-200 flex flex-col justify-between ${
                     isFull
                       ? 'bg-rose-50/70 border-rose-200 shadow-2xs'
                       : 'bg-white border-slate-200/90 hover:border-sky-300 hover:shadow-xs'
                   }`}
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-bold text-slate-800 truncate">
+                    <div className="flex items-start justify-between gap-1 mb-1.5">
+                      <span className="text-[11px] sm:text-xs font-bold text-slate-800 leading-snug line-clamp-1" title={b.leave_type_name}>
                         {b.leave_type_name}
                       </span>
                       {isFull ? (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
-                          โควตาเต็ม
+                        <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
+                          {isTraining ? 'ใช้สิทธิ์แล้ว' : 'โควตาเต็ม'}
+                        </span>
+                      ) : isNonDayQuota ? (
+                        <span className="text-[9px] sm:text-[10px] font-semibold text-sky-700 bg-sky-50 px-1.5 py-0.5 rounded shrink-0">
+                          {isTraining ? '1 ครั้ง/ปี' : code === 'SHIFT_SWAP' ? 'สลับเวร' : 'ตามเกณฑ์'}
                         </span>
                       ) : (
-                        <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded shrink-0">
+                        <span className="text-[9px] sm:text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded shrink-0">
                           คงเหลือ
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-baseline justify-between my-1">
-                      <div className="flex items-baseline gap-1">
-                        <span className={`text-2xl font-black ${isFull ? 'text-rose-600' : 'text-[#006699]'}`}>
-                          {b.remaining_days}
+                    {isTraining ? (
+                      <div className="flex items-baseline justify-between my-1">
+                        <div className="flex items-baseline gap-1">
+                          <span className={`text-xl sm:text-2xl font-black ${isFull ? 'text-rose-600' : 'text-violet-700'}`}>
+                            {Math.max(0, 1 - reqCount)}
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-medium">ครั้ง</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          สิทธิ์ 1 ครั้ง/ปี
                         </span>
-                        <span className="text-xs text-slate-500 font-medium">วัน</span>
                       </div>
-                      <span className="text-xs text-slate-400 font-medium">
-                        โควตาเต็ม {total} วัน
-                      </span>
-                    </div>
+                    ) : isNonDayQuota ? (
+                      <div className="flex items-baseline justify-between my-1.5">
+                        <span className="text-xs sm:text-sm font-bold text-slate-700">
+                          {code === 'UNPAID' ? 'ไม่เกิน 30 วัน' : code === 'SHIFT_SWAP' ? 'สลับวันออกตรวจ' : 'ตามเกณฑ์ รพ.'}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-baseline justify-between my-1">
+                        <div className="flex items-baseline gap-1">
+                          <span className={`text-xl sm:text-2xl font-black ${isFull ? 'text-rose-600' : 'text-[#006699]'}`}>
+                            {b.remaining_days}
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-medium">วัน</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          เต็ม {total} วัน
+                        </span>
+                      </div>
+                    )}
 
                     {/* Progress Bar */}
                     <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden my-2">
@@ -266,6 +298,8 @@ export default function DoctorHistoryPage() {
                         className={`h-full rounded-full transition-all duration-500 ${
                           isFull
                             ? 'bg-rose-500'
+                            : isNonDayQuota
+                            ? 'bg-sky-500'
                             : pct < 25
                             ? 'bg-amber-500'
                             : 'bg-[#006699]'
@@ -278,9 +312,9 @@ export default function DoctorHistoryPage() {
                   <div className="pt-1 border-t border-slate-100/80 flex items-center justify-between text-[10px] text-slate-500">
                     <span>ใช้แล้ว: <strong className="text-slate-700">{used}</strong> วัน</span>
                     {pending > 0 ? (
-                      <span className="text-amber-600 font-semibold">(รออนุมัติ {pending} วัน)</span>
+                      <span className="text-amber-600 font-semibold">(รอ {pending} วัน)</span>
                     ) : (
-                      <span className="text-slate-400">ไม่มีคำขอค้าง</span>
+                      <span className="text-slate-400">ไม่มีค้าง</span>
                     )}
                   </div>
                 </div>

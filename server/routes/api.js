@@ -762,42 +762,98 @@ router.get('/quota-check', (req, res) => {
   const dept = db.departments.find(d => d.id === departmentId);
   if (!dept) return res.status(404).json({ error: 'Department not found' });
 
-  // Count active leaves on that date
-  const onLeaveRequests = db.leave_requests.filter(req => {
-    if (req.status !== 'APPROVED' && req.status !== 'PENDING') return false;
-    const doc = db.doctors.find(d => d.id === req.doctor_id);
-    if (!doc || doc.department_id !== departmentId) return false;
-    return date >= req.start_date && date <= req.end_date;
+  // Only count actual doctors (exclude Medical Admin staff like EMP-KOONG who don't see patients)
+  const deptDoctors = db.doctors.filter(d => {
+    if (d.department_id !== departmentId || d.is_active === false) return false;
+    if (d.employee_id === 'EMP-KOONG') return false;
+    const roles = db.doctor_roles.filter(r => r.doctor_id === d.id).map(r => r.role);
+    return roles.includes('DOCTOR') || roles.includes('DEPT_HEAD');
   });
+  const totalDoctors = deptDoctors.length;
 
-  const currentOnLeave = onLeaveRequests.length;
-  const maxAllowed = dept.max_leave_per_day;
-  const isQuotaExceeded = currentOnLeave >= maxAllowed;
+  const computeDayAvailability = (targetDate) => {
+    const onLeaveReqs = db.leave_requests.filter(r => {
+      if (r.status !== 'APPROVED' && r.status !== 'PENDING') return false;
+      const doc = deptDoctors.find(d => d.id === r.doctor_id);
+      if (!doc) return false;
+      return targetDate >= r.start_date && targetDate <= r.end_date;
+    });
 
-  let status = 'NORMAL'; // Green
-  if (currentOnLeave >= maxAllowed) {
-    status = 'FULL'; // Red
-  } else if (currentOnLeave === maxAllowed - 1) {
-    status = 'NEAR_LIMIT'; // Amber
+    const onLeaveDocIds = new Set(onLeaveReqs.map(r => r.doctor_id));
+    const currentOnLeave = onLeaveDocIds.size;
+    const remainingDoctorsCount = Math.max(0, totalDoctors - currentOnLeave);
+    const maxAllowed = dept.max_leave_per_day;
+    const isQuotaExceeded = currentOnLeave >= maxAllowed;
+
+    let dayStatus = 'NORMAL';
+    if (currentOnLeave >= maxAllowed) {
+      dayStatus = 'FULL';
+    } else if (currentOnLeave > 0 && currentOnLeave === maxAllowed - 1) {
+      dayStatus = 'NEAR_LIMIT';
+    }
+
+    const availableDoctors = deptDoctors
+      .filter(d => !onLeaveDocIds.has(d.id))
+      .map(d => ({
+        doctor_id: d.id,
+        name: `${d.prefix_th}${d.first_name_th} ${d.last_name_th}`,
+        short_name: `${d.prefix_th}${d.first_name_th}`,
+        doctor_type: d.doctor_type
+      }));
+
+    const onLeaveDoctors = onLeaveReqs.map(r => {
+      const doc = deptDoctors.find(d => d.id === r.doctor_id);
+      return {
+        doctor_id: r.doctor_id,
+        name: doc ? `${doc.prefix_th}${doc.first_name_th} ${doc.last_name_th}` : 'แพทย์',
+        short_name: doc ? `${doc.prefix_th}${doc.first_name_th}` : 'แพทย์',
+        request_no: r.request_no,
+        status: r.status
+      };
+    });
+
+    return {
+      date: targetDate,
+      total_doctors: totalDoctors,
+      current_on_leave: currentOnLeave,
+      remaining_doctors_count: remainingDoctorsCount,
+      max_allowed: maxAllowed,
+      is_quota_exceeded: isQuotaExceeded,
+      status: dayStatus,
+      available_doctors: availableDoctors,
+      on_leave_doctors: onLeaveDoctors
+    };
+  };
+
+  const selectedDayInfo = computeDayAvailability(date);
+
+  // Build 14-day availability forecast starting from today to help doctors pick a shift-swap date
+  const todayStr = getTodayString();
+  const baseDate = new Date(todayStr + 'T00:00:00');
+  const upcomingDays = [];
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(baseDate);
+    d.setDate(baseDate.getDate() + i);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const dStr = `${yyyy}-${mm}-${dd}`;
+    upcomingDays.push(computeDayAvailability(dStr));
   }
 
   res.json({
     department_id: dept.id,
     department_name: dept.name_th,
-    max_allowed: maxAllowed,
+    total_doctors: totalDoctors,
+    remaining_doctors_count: selectedDayInfo.remaining_doctors_count,
+    max_allowed: dept.max_leave_per_day,
     min_staff_required: dept.min_staff_required,
-    current_on_leave: currentOnLeave,
-    is_quota_exceeded: isQuotaExceeded,
-    status,
-    on_leave_doctors: onLeaveRequests.map(r => {
-      const doc = db.doctors.find(d => d.id === r.doctor_id);
-      return {
-        doctor_id: r.doctor_id,
-        name: doc ? `${doc.prefix_th}${doc.first_name_th} ${doc.last_name_th}` : 'แพทย์',
-        request_no: r.request_no,
-        status: r.status
-      };
-    })
+    current_on_leave: selectedDayInfo.current_on_leave,
+    is_quota_exceeded: selectedDayInfo.is_quota_exceeded,
+    status: selectedDayInfo.status,
+    available_doctors: selectedDayInfo.available_doctors,
+    on_leave_doctors: selectedDayInfo.on_leave_doctors,
+    upcoming_days: upcomingDays
   });
 });
 

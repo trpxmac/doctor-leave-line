@@ -183,18 +183,10 @@ export default function AdminTenurePage() {
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setRulesModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all shadow-2xs"
           >
             <Sliders className="w-3.5 h-3.5 text-slate-600" />
             <span>ตั้งค่าเกณฑ์อายุงาน</span>
-          </button>
-
-          <button
-            onClick={() => setApplyModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#006699] hover:bg-[#005580] text-white text-xs font-bold transition-all shadow-sm shadow-sky-900/10"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>ประมวลผลและปรับสิทธิ์ทั้ง รพ. ({selectedYear})</span>
           </button>
         </div>
       </div>

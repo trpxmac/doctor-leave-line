@@ -358,7 +358,7 @@ export default function ApproverPage() {
                       {req.status === 'APPROVED' ? 'ผ่านครบทั้ง 2 ขั้นตอน' : `ขั้นที่ ${req.current_step || 1} จาก ${req.total_steps || 2}`}
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     {/* Step 1 Box */}
                     <div className={`p-2 rounded-lg border flex items-center justify-between ${
                       req.status === 'APPROVED' || req.current_step > 1
